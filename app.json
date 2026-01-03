@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "CDMF",
+    "slug": "cdmf",
+    "scheme": "cdmf",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1a1a2e"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.cdmf.app",
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1a1a2e"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single",
+      "backgroundColor": "#1a1a2e",
+      "name": "CDMF - Centro de Danças Marcelo Ferreira",
+      "shortName": "CDMF",
+      "themeColor": "#1a1a2e"
+    },
+    "plugins": [
+      "@react-native-firebase/app",
+      "expo-font",
+      "@react-native-google-signin/google-signin"
+    ],
+    "extra": {
+      "googleWebClientId": "225551176748-0ntgm34l4uil6vvi2jpjibnr86nthu5g.apps.googleusercontent.com",
+      "eas": {
+        "projectId": "ca0b2a68-d87b-48a4-9435-f04142151b0e"
+      }
+    }
+  }
+}

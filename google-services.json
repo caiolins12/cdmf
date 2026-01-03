@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "225551176748",
+    "project_id": "cdmf-d52fa",
+    "storage_bucket": "cdmf-d52fa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:225551176748:android:a51b1923ea7d2111996d89",
+        "android_client_info": {
+          "package_name": "com.cdmf.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "225551176748-v75jmjhp14bq25iot1lilbgblqc2v65f.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.cdmf.app",
+            "certificate_hash": "89646c70d56da9dee31db3c844c53dce1d03ec7a"
+          }
+        },
+        {
+          "client_id": "225551176748-0ntgm34l4uil6vvi2jpjibnr86nthu5g.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBxUKBldyEpIoD8Sbat3yySknA-a3NnC6o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "225551176748-0ntgm34l4uil6vvi2jpjibnr86nthu5g.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
