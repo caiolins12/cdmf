@@ -565,41 +565,96 @@ export default function TeacherFinanceScreen() {
 
       {/* Modal: Configurações */}
       <Modal visible={showSettingsModal} transparent animationType="fade">
-        <Pressable style={styles.modalOverlay} onPress={() => !processing && setShowSettingsModal(false)}>
-          <ScrollView contentContainerStyle={styles.modalScroll}>
-            <Pressable style={styles.modal} onPress={e => e.stopPropagation()}>
-              <Text style={styles.modalTitle}>Configurações PIX</Text>
-
-              <Text style={styles.inputLabel}>Chave PIX</Text>
-              <TextInput style={styles.input} value={settingsPixKey} onChangeText={setSettingsPixKey} placeholder="CPF, Email, Celular..." />
-
-              <Text style={styles.inputLabel}>Tipo da Chave</Text>
-              <View style={styles.methodsGrid}>
-                {(["cpf", "cnpj", "email", "phone"] as const).map(t => (
-                  <Pressable key={t} style={[styles.methodBtn, settingsPixKeyType === t && styles.methodBtnActive]} onPress={() => setSettingsPixKeyType(t)}>
-                    <Text style={[styles.methodBtnText, settingsPixKeyType === t && styles.methodBtnTextActive]}>{t.toUpperCase()}</Text>
-                  </Pressable>
-                ))}
+        <View style={styles.modalOverlay}>
+          <ScrollView 
+            contentContainerStyle={[styles.modalScroll, isDesktopMode && dkStyles.modalScroll]}
+            showsVerticalScrollIndicator={false}
+          >
+            <Pressable style={[styles.modal, styles.settingsModal, isDesktopMode && dkStyles.settingsModal]} onPress={e => e.stopPropagation()}>
+              <View style={styles.modalHeader}>
+                <Ionicons name="settings-outline" size={32} color={colors.purple} />
+                <Text style={styles.modalTitle}>Configurações PIX</Text>
+                <Text style={styles.modalSubtitle}>Configure os dados para receber pagamentos</Text>
               </View>
 
-              <Text style={styles.inputLabel}>Nome Recebedor</Text>
-              <TextInput style={styles.input} value={settingsReceiverName} onChangeText={setSettingsReceiverName} maxLength={25} />
+              <View style={[styles.formGrid, isDesktopMode && dkStyles.formGrid]}>
+                <View style={[styles.formGroup, isDesktopMode && dkStyles.formGroupFull]}>
+                  <Text style={styles.inputLabel}>Chave PIX</Text>
+                  <TextInput 
+                    style={styles.input} 
+                    value={settingsPixKey} 
+                    onChangeText={setSettingsPixKey} 
+                    placeholder="CPF, Email, Celular ou Chave Aleatória"
+                    placeholderTextColor="#94A3B8"
+                  />
+                </View>
 
-              <Text style={styles.inputLabel}>Cidade</Text>
-              <TextInput style={styles.input} value={settingsCity} onChangeText={setSettingsCity} maxLength={15} />
+                <View style={[styles.formGroup, isDesktopMode && dkStyles.formGroupFull]}>
+                  <Text style={styles.inputLabel}>Tipo da Chave</Text>
+                  <View style={styles.methodsGrid}>
+                    {(["cpf", "cnpj", "email", "phone"] as const).map(t => (
+                      <Pressable key={t} style={[styles.methodBtn, settingsPixKeyType === t && styles.methodBtnActive]} onPress={() => setSettingsPixKeyType(t)}>
+                        <Text style={[styles.methodBtnText, settingsPixKeyType === t && styles.methodBtnTextActive]}>{t.toUpperCase()}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
 
-              <Text style={styles.inputLabel}>Mensalidade Padrão (R$)</Text>
-              <TextInput style={styles.input} value={settingsMonthlyFee} onChangeText={setSettingsMonthlyFee} keyboardType="decimal-pad" />
+                <View style={[styles.formGroup, isDesktopMode && dkStyles.formGroupHalf]}>
+                  <Text style={styles.inputLabel}>Nome Recebedor</Text>
+                  <TextInput 
+                    style={styles.input} 
+                    value={settingsReceiverName} 
+                    onChangeText={setSettingsReceiverName} 
+                    maxLength={25}
+                    placeholder="Nome que aparecerá no PIX"
+                    placeholderTextColor="#94A3B8"
+                  />
+                  <Text style={styles.inputHint}>Máximo 25 caracteres</Text>
+                </View>
 
-              <View style={styles.modalBtns}>
-                <Pressable style={styles.btnSecondary} onPress={() => setShowSettingsModal(false)}><Text style={styles.btnSecondaryText}>Cancelar</Text></Pressable>
-                <Pressable style={styles.btnPrimary} onPress={handleSaveSettings} disabled={processing}>
-                  {processing ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.btnPrimaryText}>Salvar</Text>}
+                <View style={[styles.formGroup, isDesktopMode && dkStyles.formGroupHalf]}>
+                  <Text style={styles.inputLabel}>Cidade</Text>
+                  <TextInput 
+                    style={styles.input} 
+                    value={settingsCity} 
+                    onChangeText={setSettingsCity} 
+                    maxLength={15}
+                    placeholder="Ex: SAO PAULO"
+                    placeholderTextColor="#94A3B8"
+                  />
+                  <Text style={styles.inputHint}>Sem acentos, máximo 15 caracteres</Text>
+                </View>
+
+                <View style={[styles.formGroup, isDesktopMode && dkStyles.formGroupHalf]}>
+                  <Text style={styles.inputLabel}>Mensalidade Padrão (R$)</Text>
+                  <TextInput 
+                    style={styles.input} 
+                    value={settingsMonthlyFee} 
+                    onChangeText={setSettingsMonthlyFee} 
+                    keyboardType="decimal-pad"
+                    placeholder="91.00"
+                    placeholderTextColor="#94A3B8"
+                  />
+                </View>
+              </View>
+
+              <View style={[styles.modalBtns, isDesktopMode && dkStyles.modalBtns]}>
+                <Pressable style={[styles.btnSecondary, isDesktopMode && dkStyles.modalBtn]} onPress={() => setShowSettingsModal(false)}>
+                  <Text style={styles.btnSecondaryText}>Cancelar</Text>
+                </Pressable>
+                <Pressable style={[styles.btnPrimary, isDesktopMode && dkStyles.modalBtn]} onPress={handleSaveSettings} disabled={processing}>
+                  {processing ? <ActivityIndicator color="#fff" size="small" /> : (
+                    <>
+                      <Ionicons name="checkmark" size={18} color="#fff" />
+                      <Text style={styles.btnPrimaryText}>Salvar Configurações</Text>
+                    </>
+                  )}
                 </Pressable>
               </View>
             </Pressable>
           </ScrollView>
-        </Pressable>
+        </View>
       </Modal>
 
       {/* ==================== CONTEÚDO ==================== */}
@@ -796,11 +851,17 @@ const styles = StyleSheet.create({
   emptySubtitle: { fontSize: 13, color: "#94A3B8", marginTop: 4 },
 
   // Modals
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center" },
-  modalScroll: { flexGrow: 1, justifyContent: "center", padding: 20 },
-  modal: { backgroundColor: "#fff", borderRadius: 16, padding: 24, width: "90%", maxWidth: 400 },
-  modalTitle: { fontSize: 18, fontWeight: "700", color: "#1E293B", textAlign: "center", marginBottom: 20 },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
+  modalScroll: { flexGrow: 1, justifyContent: "center", padding: 16, width: "100%" },
+  modal: { backgroundColor: "#fff", borderRadius: 16, padding: 20, width: "100%", maxWidth: 400, alignSelf: "center" },
+  settingsModal: { maxWidth: 500 },
+  modalHeader: { alignItems: "center", marginBottom: 20 },
+  modalTitle: { fontSize: 18, fontWeight: "700", color: "#1E293B", textAlign: "center", marginTop: 12 },
+  modalSubtitle: { fontSize: 13, color: "#64748B", textAlign: "center", marginTop: 4 },
+  formGrid: { gap: 0 },
+  formGroup: { marginBottom: 4 },
   inputLabel: { fontSize: 13, fontWeight: "600", color: "#64748B", marginBottom: 6, marginTop: 12 },
+  inputHint: { fontSize: 11, color: "#94A3B8", marginTop: 4 },
   input: { backgroundColor: "#F8FAFC", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: "#1E293B", borderWidth: 1, borderColor: "#E2E8F0" },
   chipsScroll: { marginVertical: 4 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: "#F1F5F9", marginRight: 8, borderWidth: 1, borderColor: "#E2E8F0" },
@@ -862,5 +923,33 @@ const dkStyles = StyleSheet.create({
   section: { 
     maxWidth: 800,
     marginBottom: 28,
+  },
+  // Modal desktop
+  modalScroll: {
+    padding: 32,
+  },
+  settingsModal: {
+    maxWidth: 600,
+    padding: 32,
+  },
+  formGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 16,
+  },
+  formGroupFull: {
+    width: "100%",
+  },
+  formGroupHalf: {
+    flex: 1,
+    minWidth: 200,
+  },
+  modalBtns: {
+    justifyContent: "flex-end",
+    marginTop: 28,
+  },
+  modalBtn: {
+    flex: 0,
+    paddingHorizontal: 24,
   },
 });
