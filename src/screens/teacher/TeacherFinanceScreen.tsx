@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Modal, Alert, ActivityIndicator, RefreshControl } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Modal, Alert, ActivityIndicator, RefreshControl, Platform } from "react-native";
 import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Clipboard from "expo-clipboard";
@@ -11,68 +11,7 @@ import { useDesktop } from "../../contexts/DesktopContext";
 import { useAuth, Profile } from "../../contexts/AuthContext";
 import { usePayment, Invoice, Transaction, formatCurrency, toCents, PaymentMethod, FinancialSummary } from "../../contexts/PaymentContext";
 
-type FilterMonth = string; // "2025-01" format
-
-function StatusDot({ status }: { status: Invoice["status"] }) {
-  const config = {
-    paid: { color: "#1B8E3E", icon: "checkmark-circle" },
-    pending: { color: "#B8860B", icon: "time" },
-    overdue: { color: colors.danger, icon: "alert-circle" },
-    cancelled: { color: colors.muted, icon: "close-circle" },
-  };
-  const { color, icon } = config[status];
-  return <Ionicons name={icon as any} size={18} color={color} />;
-}
-
-function KpiCard({
-  title,
-  value,
-  subtitle,
-  icon,
-  color,
-}: {
-  title: string;
-  value: string;
-  subtitle?: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  color?: string;
-}) {
-  return (
-    <View style={styles.kpiCard}>
-      <View style={styles.kpiTop}>
-        <Ionicons name={icon} size={20} color={color || colors.text} />
-        <Text style={styles.kpiTitle}>{title}</Text>
-      </View>
-      <Text style={[styles.kpiValue, color ? { color } : null]}>{value}</Text>
-      {subtitle ? <Text style={styles.kpiSub}>{subtitle}</Text> : null}
-    </View>
-  );
-}
-
-function ActionTile({
-  label,
-  icon,
-  onPress,
-  disabled,
-}: {
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  onPress: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <Pressable 
-      style={[styles.tile, disabled && styles.tileDisabled]} 
-      onPress={onPress}
-      disabled={disabled}
-    >
-      <Ionicons name={icon} size={22} color={disabled ? colors.muted : colors.text} />
-      <Text style={[styles.tileText, disabled && styles.tileTextDisabled]} numberOfLines={2}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
+type FilterMonth = string;
 
 // Formata mês para exibição
 function formatMonthDisplay(month: string): string {
@@ -91,6 +30,157 @@ function getRecentMonths(): string[] {
   }
   return months;
 }
+
+// ==================== COMPONENTES ====================
+
+function StatCard({ 
+  title, 
+  value, 
+  subtitle, 
+  icon, 
+  color,
+  bgColor,
+}: { 
+  title: string; 
+  value: string; 
+  subtitle?: string; 
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  bgColor: string;
+}) {
+  return (
+    <View style={[styles.statCard, { borderLeftColor: color }]}>
+      <View style={[styles.statIconBox, { backgroundColor: bgColor }]}>
+        <Ionicons name={icon} size={20} color={color} />
+      </View>
+      <View style={styles.statContent}>
+        <Text style={styles.statTitle}>{title}</Text>
+        <Text style={[styles.statValue, { color }]}>{value}</Text>
+        {subtitle && <Text style={styles.statSubtitle}>{subtitle}</Text>}
+      </View>
+    </View>
+  );
+}
+
+function QuickAction({ 
+  icon, 
+  label, 
+  onPress, 
+  disabled,
+  variant = "default",
+}: { 
+  icon: keyof typeof Ionicons.glyphMap; 
+  label: string; 
+  onPress: () => void;
+  disabled?: boolean;
+  variant?: "default" | "primary" | "success";
+}) {
+  const bgColors = {
+    default: "#F8FAFC",
+    primary: colors.purple,
+    success: colors.green,
+  };
+  const textColors = {
+    default: colors.text,
+    primary: "#fff",
+    success: "#fff",
+  };
+
+  return (
+    <Pressable 
+      style={({ pressed }) => [
+        styles.quickAction,
+        { backgroundColor: bgColors[variant], opacity: pressed ? 0.8 : disabled ? 0.5 : 1 }
+      ]}
+      onPress={onPress}
+      disabled={disabled}
+    >
+      <Ionicons name={icon} size={18} color={textColors[variant]} />
+      <Text style={[styles.quickActionText, { color: textColors[variant] }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function InvoiceCard({ 
+  invoice, 
+  onPix, 
+  onMarkPaid,
+}: { 
+  invoice: Invoice; 
+  onPix: () => void; 
+  onMarkPaid: () => void;
+}) {
+  const isOverdue = invoice.status === "overdue";
+  const statusColor = isOverdue ? colors.danger : "#D97706";
+  const statusBg = isOverdue ? "#FEF2F2" : "#FEF3C7";
+  const statusText = isOverdue ? "Atrasado" : "Pendente";
+
+  return (
+    <View style={styles.invoiceCard}>
+      <View style={styles.invoiceHeader}>
+        <View style={styles.invoiceInfo}>
+          <Text style={styles.invoiceName}>{invoice.studentName}</Text>
+          <Text style={styles.invoiceMeta}>
+            Venc: {invoice.dueDate.split("-").reverse().join("/")}
+          </Text>
+        </View>
+        <View style={styles.invoiceAmountBox}>
+          <Text style={styles.invoiceAmount}>{formatCurrency(invoice.amount)}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: statusBg }]}>
+            <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+            <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
+          </View>
+        </View>
+      </View>
+      <View style={styles.invoiceActions}>
+        <Pressable style={styles.invoiceBtn} onPress={onPix}>
+          <Ionicons name="qr-code-outline" size={16} color={colors.purple} />
+          <Text style={styles.invoiceBtnText}>Gerar PIX</Text>
+        </Pressable>
+        <Pressable style={[styles.invoiceBtn, styles.invoiceBtnPrimary]} onPress={onMarkPaid}>
+          <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
+          <Text style={[styles.invoiceBtnText, { color: "#fff" }]}>Marcar Pago</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function PaidCard({ invoice }: { invoice: Invoice }) {
+  const methodLabels: Record<string, string> = {
+    pix: "PIX",
+    cash: "Dinheiro",
+    card: "Cartão",
+    transfer: "Transferência",
+  };
+
+  return (
+    <View style={styles.paidCard}>
+      <View style={styles.paidIcon}>
+        <Ionicons name="checkmark-circle" size={20} color={colors.green} />
+      </View>
+      <View style={styles.paidInfo}>
+        <Text style={styles.paidName}>{invoice.studentName}</Text>
+        <Text style={styles.paidMeta}>
+          {invoice.paidAt ? new Date(invoice.paidAt).toLocaleDateString("pt-BR") : ""} • {methodLabels[invoice.paidMethod || "pix"]}
+        </Text>
+      </View>
+      <Text style={styles.paidAmount}>{formatCurrency(invoice.amount)}</Text>
+    </View>
+  );
+}
+
+function EmptyState({ icon, title, subtitle }: { icon: keyof typeof Ionicons.glyphMap; title: string; subtitle?: string }) {
+  return (
+    <View style={styles.emptyState}>
+      <Ionicons name={icon} size={40} color="#CBD5E1" />
+      <Text style={styles.emptyTitle}>{title}</Text>
+      {subtitle && <Text style={styles.emptySubtitle}>{subtitle}</Text>}
+    </View>
+  );
+}
+
+// ==================== TELA PRINCIPAL ====================
 
 export default function TeacherFinanceScreen() {
   const { isDesktopMode } = useDesktop();
@@ -160,7 +250,6 @@ export default function TeacherFinanceScreen() {
       setSummary(summaryData);
       setStudents(studentsData.filter(s => s.enrollmentStatus === "ativo"));
 
-      // Atualiza faturas vencidas
       await updateOverdueInvoices();
     } catch (e) {
       console.error("Erro ao carregar dados financeiros:", e);
@@ -223,7 +312,7 @@ export default function TeacherFinanceScreen() {
       setNewInvoiceDescription("");
       setNewInvoiceDueDate("");
       await loadData();
-      Alert.alert("Sucesso", "Cobrança criada com sucesso!");
+      Alert.alert("Sucesso", "Cobrança criada!");
     } catch (e: any) {
       Alert.alert("Erro", e.message || "Não foi possível criar a cobrança");
     } finally {
@@ -241,7 +330,7 @@ export default function TeacherFinanceScreen() {
       setSelectedInvoice(null);
       setPaymentNotes("");
       await loadData();
-      Alert.alert("Sucesso", "Pagamento registrado com sucesso!");
+      Alert.alert("Sucesso", "Pagamento registrado!");
     } catch (e: any) {
       Alert.alert("Erro", e.message || "Não foi possível registrar o pagamento");
     } finally {
@@ -257,7 +346,7 @@ export default function TeacherFinanceScreen() {
       setPixCode(code);
       setShowPixModal(true);
     } catch (e: any) {
-      Alert.alert("Erro", e.message || "Não foi possível gerar o PIX. Configure a chave PIX nas configurações.");
+      Alert.alert("Erro", e.message || "Configure a chave PIX nas configurações.");
     } finally {
       setProcessing(false);
     }
@@ -265,7 +354,7 @@ export default function TeacherFinanceScreen() {
 
   const handleCopyPix = async () => {
     await Clipboard.setStringAsync(pixCode);
-    Alert.alert("Copiado!", "Código PIX copiado para a área de transferência");
+    Alert.alert("Copiado!", "Código PIX copiado");
   };
 
   const handleGenerateBatch = async () => {
@@ -275,7 +364,7 @@ export default function TeacherFinanceScreen() {
       const created = await generateMonthlyInvoices(students, month, amount);
       setShowGenerateBatchModal(false);
       await loadData();
-      Alert.alert("Sucesso", `${created} cobrança(s) gerada(s) para o mês ${formatMonthDisplay(month)}`);
+      Alert.alert("Sucesso", `${created} cobrança(s) gerada(s)`);
     } catch (e: any) {
       Alert.alert("Erro", e.message || "Erro ao gerar cobranças");
     } finally {
@@ -308,7 +397,7 @@ export default function TeacherFinanceScreen() {
       setShowSettingsModal(false);
       Alert.alert("Sucesso", "Configurações salvas!");
     } catch (e: any) {
-      Alert.alert("Erro", e.message || "Erro ao salvar configurações");
+      Alert.alert("Erro", e.message);
     } finally {
       setProcessing(false);
     }
@@ -325,31 +414,33 @@ export default function TeacherFinanceScreen() {
     return (
       <View style={[styles.screen, styles.loadingContainer]}>
         <ActivityIndicator size="large" color={colors.purple} />
-        <Text style={styles.loadingText}>Carregando dados financeiros...</Text>
+        <Text style={styles.loadingText}>Carregando...</Text>
       </View>
     );
   }
 
   return (
-    <View style={[styles.screen, isDesktopMode && desktopStyles.screen]}>
+    <View style={[styles.screen, isDesktopMode && dkStyles.screen]}>
       {!isDesktopMode && <CdmfHeader />}
       {!isDesktopMode && <SectionHeader title="Financeiro" />}
 
+      {/* ==================== MODAIS ==================== */}
+      
       {/* Modal: Criar Cobrança */}
       <Modal visible={showCreateInvoiceModal} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => !processing && setShowCreateInvoiceModal(false)}>
           <Pressable style={styles.modal} onPress={e => e.stopPropagation()}>
             <Text style={styles.modalTitle}>Nova Cobrança</Text>
 
-            <Text style={styles.inputLabel}>Aluno *</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.studentsScroll}>
+            <Text style={styles.inputLabel}>Aluno</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
               {students.map(s => (
                 <Pressable
                   key={s.uid}
-                  style={[styles.studentChip, newInvoiceStudentId === s.uid && styles.studentChipSelected]}
+                  style={[styles.chip, newInvoiceStudentId === s.uid && styles.chipSelected]}
                   onPress={() => setNewInvoiceStudentId(s.uid)}
                 >
-                  <Text style={[styles.studentChipText, newInvoiceStudentId === s.uid && styles.studentChipTextSelected]}>
+                  <Text style={[styles.chipText, newInvoiceStudentId === s.uid && styles.chipTextSelected]}>
                     {s.name.split(" ")[0]}
                   </Text>
                 </Pressable>
@@ -357,36 +448,18 @@ export default function TeacherFinanceScreen() {
             </ScrollView>
 
             <Text style={styles.inputLabel}>Valor (R$)</Text>
-            <TextInput
-              style={styles.input}
-              value={newInvoiceAmount}
-              onChangeText={setNewInvoiceAmount}
-              keyboardType="decimal-pad"
-              placeholder="91.00"
-            />
+            <TextInput style={styles.input} value={newInvoiceAmount} onChangeText={setNewInvoiceAmount} keyboardType="decimal-pad" />
 
             <Text style={styles.inputLabel}>Descrição</Text>
-            <TextInput
-              style={styles.input}
-              value={newInvoiceDescription}
-              onChangeText={setNewInvoiceDescription}
-              placeholder={`Mensalidade ${formatMonthDisplay(month)}`}
-            />
+            <TextInput style={styles.input} value={newInvoiceDescription} onChangeText={setNewInvoiceDescription} placeholder={`Mensalidade ${formatMonthDisplay(month)}`} />
 
-            <Text style={styles.inputLabel}>Vencimento (AAAA-MM-DD)</Text>
-            <TextInput
-              style={styles.input}
-              value={newInvoiceDueDate}
-              onChangeText={setNewInvoiceDueDate}
-              placeholder="2025-01-10"
-            />
+            <Text style={styles.inputLabel}>Vencimento</Text>
+            <TextInput style={styles.input} value={newInvoiceDueDate} onChangeText={setNewInvoiceDueDate} placeholder="2025-01-10" />
 
-            <View style={styles.modalActions}>
-              <Pressable style={styles.cancelBtn} onPress={() => setShowCreateInvoiceModal(false)} disabled={processing}>
-                <Text style={styles.cancelBtnText}>Cancelar</Text>
-              </Pressable>
-              <Pressable style={styles.confirmBtn} onPress={handleCreateInvoice} disabled={processing}>
-                {processing ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmBtnText}>Criar</Text>}
+            <View style={styles.modalBtns}>
+              <Pressable style={styles.btnSecondary} onPress={() => setShowCreateInvoiceModal(false)}><Text style={styles.btnSecondaryText}>Cancelar</Text></Pressable>
+              <Pressable style={styles.btnPrimary} onPress={handleCreateInvoice} disabled={processing}>
+                {processing ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.btnPrimaryText}>Criar</Text>}
               </Pressable>
             </View>
           </Pressable>
@@ -401,46 +474,37 @@ export default function TeacherFinanceScreen() {
             
             {selectedInvoice && (
               <View style={styles.invoiceSummary}>
-                <Text style={styles.invoiceSummaryName}>{selectedInvoice.studentName}</Text>
-                <Text style={styles.invoiceSummaryAmount}>{formatCurrency(selectedInvoice.amount)}</Text>
+                <Text style={styles.summaryName}>{selectedInvoice.studentName}</Text>
+                <Text style={styles.summaryAmount}>{formatCurrency(selectedInvoice.amount)}</Text>
               </View>
             )}
 
-            <Text style={styles.inputLabel}>Método de Pagamento</Text>
-            <View style={styles.methodsRow}>
-              {(["pix", "cash", "card", "transfer"] as PaymentMethod[]).map(m => (
+            <Text style={styles.inputLabel}>Método</Text>
+            <View style={styles.methodsGrid}>
+              {([
+                { id: "pix", label: "PIX", icon: "qr-code" },
+                { id: "cash", label: "Dinheiro", icon: "cash" },
+                { id: "card", label: "Cartão", icon: "card" },
+                { id: "transfer", label: "Transf.", icon: "swap-horizontal" },
+              ] as const).map(m => (
                 <Pressable
-                  key={m}
-                  style={[styles.methodChip, paymentMethod === m && styles.methodChipSelected]}
-                  onPress={() => setPaymentMethod(m)}
+                  key={m.id}
+                  style={[styles.methodBtn, paymentMethod === m.id && styles.methodBtnActive]}
+                  onPress={() => setPaymentMethod(m.id)}
                 >
-                  <Ionicons 
-                    name={m === "pix" ? "qr-code" : m === "cash" ? "cash" : m === "card" ? "card" : "swap-horizontal"} 
-                    size={16} 
-                    color={paymentMethod === m ? "#fff" : colors.text} 
-                  />
-                  <Text style={[styles.methodChipText, paymentMethod === m && styles.methodChipTextSelected]}>
-                    {m === "pix" ? "PIX" : m === "cash" ? "Dinheiro" : m === "card" ? "Cartão" : "Transf."}
-                  </Text>
+                  <Ionicons name={m.icon} size={18} color={paymentMethod === m.id ? "#fff" : colors.text} />
+                  <Text style={[styles.methodBtnText, paymentMethod === m.id && styles.methodBtnTextActive]}>{m.label}</Text>
                 </Pressable>
               ))}
             </View>
 
-            <Text style={styles.inputLabel}>Observações (opcional)</Text>
-            <TextInput
-              style={[styles.input, { height: 60 }]}
-              value={paymentNotes}
-              onChangeText={setPaymentNotes}
-              placeholder="Adicionar observação..."
-              multiline
-            />
+            <Text style={styles.inputLabel}>Observação</Text>
+            <TextInput style={[styles.input, { height: 60 }]} value={paymentNotes} onChangeText={setPaymentNotes} multiline placeholder="Opcional..." />
 
-            <View style={styles.modalActions}>
-              <Pressable style={styles.cancelBtn} onPress={() => setShowPaymentModal(false)} disabled={processing}>
-                <Text style={styles.cancelBtnText}>Cancelar</Text>
-              </Pressable>
-              <Pressable style={[styles.confirmBtn, { backgroundColor: colors.green }]} onPress={handleMarkAsPaid} disabled={processing}>
-                {processing ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmBtnText}>Confirmar</Text>}
+            <View style={styles.modalBtns}>
+              <Pressable style={styles.btnSecondary} onPress={() => setShowPaymentModal(false)}><Text style={styles.btnSecondaryText}>Cancelar</Text></Pressable>
+              <Pressable style={[styles.btnPrimary, { backgroundColor: colors.green }]} onPress={handleMarkAsPaid} disabled={processing}>
+                {processing ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.btnPrimaryText}>Confirmar</Text>}
               </Pressable>
             </View>
           </Pressable>
@@ -451,64 +515,48 @@ export default function TeacherFinanceScreen() {
       <Modal visible={showPixModal} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setShowPixModal(false)}>
           <Pressable style={styles.modal} onPress={e => e.stopPropagation()}>
-            <Ionicons name="qr-code" size={48} color={colors.purple} style={{ alignSelf: "center", marginBottom: 16 }} />
-            <Text style={styles.modalTitle}>Código PIX</Text>
+            <View style={styles.pixHeader}>
+              <Ionicons name="qr-code" size={40} color={colors.purple} />
+              <Text style={styles.modalTitle}>Código PIX</Text>
+            </View>
             
             {selectedInvoice && (
               <View style={styles.invoiceSummary}>
-                <Text style={styles.invoiceSummaryName}>{selectedInvoice.studentName}</Text>
-                <Text style={styles.invoiceSummaryAmount}>{formatCurrency(selectedInvoice.amount)}</Text>
+                <Text style={styles.summaryName}>{selectedInvoice.studentName}</Text>
+                <Text style={styles.summaryAmount}>{formatCurrency(selectedInvoice.amount)}</Text>
               </View>
             )}
 
-            <View style={styles.pixCodeBox}>
-              <Text style={styles.pixCodeLabel}>Copia e Cola:</Text>
-              <Text style={styles.pixCode} numberOfLines={3} ellipsizeMode="middle">
-                {pixCode || "Gerando..."}
-              </Text>
+            <View style={styles.pixBox}>
+              <Text style={styles.pixLabel}>Copia e Cola:</Text>
+              <Text style={styles.pixCode} numberOfLines={3}>{pixCode || "Gerando..."}</Text>
             </View>
 
-            <Pressable style={[styles.confirmBtn, { marginTop: 16 }]} onPress={handleCopyPix}>
+            <Pressable style={styles.btnPrimary} onPress={handleCopyPix}>
               <Ionicons name="copy" size={18} color="#fff" />
-              <Text style={styles.confirmBtnText}>Copiar Código</Text>
+              <Text style={styles.btnPrimaryText}>Copiar Código</Text>
             </Pressable>
-
-            <Pressable style={[styles.cancelBtn, { marginTop: 10 }]} onPress={() => setShowPixModal(false)}>
-              <Text style={styles.cancelBtnText}>Fechar</Text>
+            <Pressable style={[styles.btnSecondary, { marginTop: 10 }]} onPress={() => setShowPixModal(false)}>
+              <Text style={styles.btnSecondaryText}>Fechar</Text>
             </Pressable>
           </Pressable>
         </Pressable>
       </Modal>
 
-      {/* Modal: Gerar Cobranças em Lote */}
+      {/* Modal: Gerar Lote */}
       <Modal visible={showGenerateBatchModal} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => !processing && setShowGenerateBatchModal(false)}>
           <Pressable style={styles.modal} onPress={e => e.stopPropagation()}>
             <Text style={styles.modalTitle}>Gerar Cobranças em Lote</Text>
-            
-            <Text style={styles.batchInfo}>
-              Serão geradas cobranças para todos os alunos ativos que ainda não possuem cobrança no mês {formatMonthDisplay(month)}.
-            </Text>
+            <Text style={styles.batchInfo}>Gerar cobranças para todos os {students.length} alunos ativos no mês {formatMonthDisplay(month)}.</Text>
 
-            <Text style={styles.batchInfo}>
-              <Text style={{ fontWeight: "800" }}>{students.length}</Text> alunos ativos
-            </Text>
+            <Text style={styles.inputLabel}>Valor (R$)</Text>
+            <TextInput style={styles.input} value={batchAmount} onChangeText={setBatchAmount} keyboardType="decimal-pad" />
 
-            <Text style={styles.inputLabel}>Valor da Mensalidade (R$)</Text>
-            <TextInput
-              style={styles.input}
-              value={batchAmount}
-              onChangeText={setBatchAmount}
-              keyboardType="decimal-pad"
-              placeholder="91.00"
-            />
-
-            <View style={styles.modalActions}>
-              <Pressable style={styles.cancelBtn} onPress={() => setShowGenerateBatchModal(false)} disabled={processing}>
-                <Text style={styles.cancelBtnText}>Cancelar</Text>
-              </Pressable>
-              <Pressable style={styles.confirmBtn} onPress={handleGenerateBatch} disabled={processing}>
-                {processing ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmBtnText}>Gerar</Text>}
+            <View style={styles.modalBtns}>
+              <Pressable style={styles.btnSecondary} onPress={() => setShowGenerateBatchModal(false)}><Text style={styles.btnSecondaryText}>Cancelar</Text></Pressable>
+              <Pressable style={styles.btnPrimary} onPress={handleGenerateBatch} disabled={processing}>
+                {processing ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.btnPrimaryText}>Gerar</Text>}
               </Pressable>
             </View>
           </Pressable>
@@ -518,66 +566,35 @@ export default function TeacherFinanceScreen() {
       {/* Modal: Configurações */}
       <Modal visible={showSettingsModal} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => !processing && setShowSettingsModal(false)}>
-          <ScrollView contentContainerStyle={styles.modalScrollContent}>
+          <ScrollView contentContainerStyle={styles.modalScroll}>
             <Pressable style={styles.modal} onPress={e => e.stopPropagation()}>
-              <Text style={styles.modalTitle}>Configurações de Pagamento</Text>
+              <Text style={styles.modalTitle}>Configurações PIX</Text>
 
               <Text style={styles.inputLabel}>Chave PIX</Text>
-              <TextInput
-                style={styles.input}
-                value={settingsPixKey}
-                onChangeText={setSettingsPixKey}
-                placeholder="CPF, CNPJ, Email ou Celular"
-              />
+              <TextInput style={styles.input} value={settingsPixKey} onChangeText={setSettingsPixKey} placeholder="CPF, Email, Celular..." />
 
               <Text style={styles.inputLabel}>Tipo da Chave</Text>
-              <View style={styles.methodsRow}>
+              <View style={styles.methodsGrid}>
                 {(["cpf", "cnpj", "email", "phone"] as const).map(t => (
-                  <Pressable
-                    key={t}
-                    style={[styles.methodChip, settingsPixKeyType === t && styles.methodChipSelected]}
-                    onPress={() => setSettingsPixKeyType(t)}
-                  >
-                    <Text style={[styles.methodChipText, settingsPixKeyType === t && styles.methodChipTextSelected]}>
-                      {t.toUpperCase()}
-                    </Text>
+                  <Pressable key={t} style={[styles.methodBtn, settingsPixKeyType === t && styles.methodBtnActive]} onPress={() => setSettingsPixKeyType(t)}>
+                    <Text style={[styles.methodBtnText, settingsPixKeyType === t && styles.methodBtnTextActive]}>{t.toUpperCase()}</Text>
                   </Pressable>
                 ))}
               </View>
 
-              <Text style={styles.inputLabel}>Nome do Recebedor</Text>
-              <TextInput
-                style={styles.input}
-                value={settingsReceiverName}
-                onChangeText={setSettingsReceiverName}
-                placeholder="CDMF Centro de Danças"
-                maxLength={25}
-              />
+              <Text style={styles.inputLabel}>Nome Recebedor</Text>
+              <TextInput style={styles.input} value={settingsReceiverName} onChangeText={setSettingsReceiverName} maxLength={25} />
 
               <Text style={styles.inputLabel}>Cidade</Text>
-              <TextInput
-                style={styles.input}
-                value={settingsCity}
-                onChangeText={setSettingsCity}
-                placeholder="SAO PAULO"
-                maxLength={15}
-              />
+              <TextInput style={styles.input} value={settingsCity} onChangeText={setSettingsCity} maxLength={15} />
 
               <Text style={styles.inputLabel}>Mensalidade Padrão (R$)</Text>
-              <TextInput
-                style={styles.input}
-                value={settingsMonthlyFee}
-                onChangeText={setSettingsMonthlyFee}
-                keyboardType="decimal-pad"
-                placeholder="91.00"
-              />
+              <TextInput style={styles.input} value={settingsMonthlyFee} onChangeText={setSettingsMonthlyFee} keyboardType="decimal-pad" />
 
-              <View style={styles.modalActions}>
-                <Pressable style={styles.cancelBtn} onPress={() => setShowSettingsModal(false)} disabled={processing}>
-                  <Text style={styles.cancelBtnText}>Cancelar</Text>
-                </Pressable>
-                <Pressable style={styles.confirmBtn} onPress={handleSaveSettings} disabled={processing}>
-                  {processing ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmBtnText}>Salvar</Text>}
+              <View style={styles.modalBtns}>
+                <Pressable style={styles.btnSecondary} onPress={() => setShowSettingsModal(false)}><Text style={styles.btnSecondaryText}>Cancelar</Text></Pressable>
+                <Pressable style={styles.btnPrimary} onPress={handleSaveSettings} disabled={processing}>
+                  {processing ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.btnPrimaryText}>Salvar</Text>}
                 </Pressable>
               </View>
             </Pressable>
@@ -585,157 +602,75 @@ export default function TeacherFinanceScreen() {
         </Pressable>
       </Modal>
 
-      {/* Filtros */}
-      <View style={[styles.filtersRow, isDesktopMode && desktopStyles.filtersRow]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.monthScroll}>
-          <View style={styles.monthRow}>
+      {/* ==================== CONTEÚDO ==================== */}
+
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={[styles.content, isDesktopMode && dkStyles.content]} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.purple]} />}
+      >
+        {/* Header com filtros */}
+        <View style={[styles.header, isDesktopMode && dkStyles.header]}>
+          <View style={styles.monthsRow}>
             {recentMonths.map(m => (
-              <Pressable
-                key={m}
-                onPress={() => setMonth(m)}
-                style={[styles.monthPill, m === month && styles.monthPillActive]}
-              >
-                <Text style={[styles.monthText, m === month && styles.monthTextActive]}>
-                  {formatMonthDisplay(m)}
-                </Text>
+              <Pressable key={m} onPress={() => setMonth(m)} style={[styles.monthPill, m === month && styles.monthPillActive]}>
+                <Text style={[styles.monthText, m === month && styles.monthTextActive]}>{formatMonthDisplay(m)}</Text>
               </Pressable>
             ))}
           </View>
-        </ScrollView>
-
-        <View style={styles.searchBox}>
-          <Ionicons name="search" size={18} color="#666" />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Buscar aluno..."
-            placeholderTextColor="#777"
-            style={styles.searchInput}
-          />
-        </View>
-      </View>
-
-      <ScrollView 
-        contentContainerStyle={[styles.content, isDesktopMode && desktopStyles.content]} 
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.purple]} />
-        }
-      >
-        {/* KPI / Resumo do mês */}
-        <View style={[styles.kpiGrid, isDesktopMode && desktopStyles.kpiGrid]}>
-          <KpiCard
-            title="Recebido"
-            value={formatCurrency(summary?.totalReceived || 0)}
-            subtitle={`${summary?.invoicesCount.paid || 0} pagos`}
-            icon="cash-outline"
-            color={colors.green}
-          />
-          <KpiCard
-            title="Pendente"
-            value={formatCurrency(summary?.totalPending || 0)}
-            subtitle={`${summary?.invoicesCount.pending || 0} aguardando`}
-            icon="time-outline"
-            color="#B8860B"
-          />
-          <KpiCard
-            title="Atrasado"
-            value={formatCurrency(summary?.totalOverdue || 0)}
-            subtitle={`${summary?.invoicesCount.overdue || 0} vencidos`}
-            icon="alert-circle-outline"
-            color={colors.danger}
-          />
-          <KpiCard
-            title="Saldo"
-            value={formatCurrency(summary?.balance || 0)}
-            subtitle="Entradas - Saídas"
-            icon="wallet-outline"
-            color={colors.purple}
-          />
+          <View style={styles.searchBox}>
+            <Ionicons name="search" size={16} color="#94A3B8" />
+            <TextInput value={query} onChangeText={setQuery} placeholder="Buscar..." placeholderTextColor="#94A3B8" style={styles.searchInput} />
+          </View>
         </View>
 
-        {/* Atalhos */}
-        <SectionHeader title="Ações Rápidas" />
-        <View style={[styles.tilesGrid, isDesktopMode && desktopStyles.tilesGrid]}>
-          <ActionTile 
-            label="Nova Cobrança" 
-            icon="add-circle-outline" 
-            onPress={() => setShowCreateInvoiceModal(true)} 
-          />
-          <ActionTile 
-            label="Gerar Lote" 
-            icon="layers-outline" 
-            onPress={() => setShowGenerateBatchModal(true)} 
-          />
-          <ActionTile 
-            label="Configurações" 
-            icon="settings-outline" 
-            onPress={handleOpenSettings}
-            disabled={!isMaster}
-          />
-          <ActionTile 
-            label="Relatórios" 
-            icon="document-text-outline" 
-            onPress={() => Alert.alert("Em breve", "Relatórios serão implementados em breve!")} 
-          />
+        {/* Cards de Estatísticas */}
+        <View style={[styles.statsGrid, isDesktopMode && dkStyles.statsGrid]}>
+          <StatCard title="Recebido" value={formatCurrency(summary?.totalReceived || 0)} subtitle={`${summary?.invoicesCount.paid || 0} pagamentos`} icon="trending-up" color="#059669" bgColor="#D1FAE5" />
+          <StatCard title="Pendente" value={formatCurrency(summary?.totalPending || 0)} subtitle={`${summary?.invoicesCount.pending || 0} aguardando`} icon="time" color="#D97706" bgColor="#FEF3C7" />
+          <StatCard title="Atrasado" value={formatCurrency(summary?.totalOverdue || 0)} subtitle={`${summary?.invoicesCount.overdue || 0} vencidos`} icon="alert-circle" color="#DC2626" bgColor="#FEE2E2" />
+          <StatCard title="Saldo" value={formatCurrency(summary?.balance || 0)} subtitle="Entradas - Saídas" icon="wallet" color={colors.purple} bgColor="#EDE9FE" />
+        </View>
+
+        {/* Ações Rápidas */}
+        <View style={[styles.actionsRow, isDesktopMode && dkStyles.actionsRow]}>
+          <QuickAction icon="add-circle-outline" label="Nova Cobrança" onPress={() => setShowCreateInvoiceModal(true)} variant="primary" />
+          <QuickAction icon="layers-outline" label="Gerar Lote" onPress={() => setShowGenerateBatchModal(true)} />
+          <QuickAction icon="settings-outline" label="Configurações" onPress={handleOpenSettings} disabled={!isMaster} />
         </View>
 
         {/* Pendências */}
-        <SectionHeader title={`Pendências (${pendingInvoices.length})`} />
-        <View style={[styles.panel, isDesktopMode && desktopStyles.panel]}>
+        <View style={[styles.section, isDesktopMode && dkStyles.section]}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Pendências</Text>
+            <Text style={styles.sectionBadge}>{pendingInvoices.length}</Text>
+          </View>
+          
           {pendingInvoices.length === 0 ? (
-            <Text style={styles.empty}>Nenhuma cobrança pendente 🎉</Text>
+            <EmptyState icon="checkmark-done-circle" title="Tudo em dia!" subtitle="Nenhuma cobrança pendente" />
           ) : (
-            pendingInvoices.map(inv => (
-              <View key={inv.id} style={styles.invoiceRow}>
-                <View style={styles.invoiceInfo}>
-                  <Text style={styles.invoiceName} numberOfLines={1}>{inv.studentName}</Text>
-                  <Text style={styles.invoiceMeta}>
-                    Venc.: {inv.dueDate.split("-").reverse().join("/")} • {inv.description}
-                  </Text>
-                </View>
-
-                <View style={styles.invoiceRight}>
-                  <Text style={styles.invoiceAmount}>{formatCurrency(inv.amount)}</Text>
-                  <StatusDot status={inv.status} />
-                </View>
-
-                <View style={styles.invoiceActions}>
-                  <Pressable style={styles.smallBtn} onPress={() => handleGeneratePix(inv)}>
-                    <Text style={styles.smallBtnText}>PIX</Text>
-                  </Pressable>
-                  <Pressable style={[styles.smallBtn, styles.smallBtnDark]} onPress={() => openPaymentModal(inv)}>
-                    <Text style={[styles.smallBtnText, { color: "white" }]}>PAGO</Text>
-                  </Pressable>
-                </View>
-
-                <View style={styles.divider} />
-              </View>
-            ))
+            <View style={styles.cardsList}>
+              {pendingInvoices.map(inv => (
+                <InvoiceCard key={inv.id} invoice={inv} onPix={() => handleGeneratePix(inv)} onMarkPaid={() => openPaymentModal(inv)} />
+              ))}
+            </View>
           )}
         </View>
 
-        {/* Últimos pagamentos */}
-        <SectionHeader title={`Pagamentos do Mês (${paidInvoices.length})`} />
-        <View style={[styles.panel, isDesktopMode && desktopStyles.panel]}>
+        {/* Pagamentos do Mês */}
+        <View style={[styles.section, isDesktopMode && dkStyles.section]}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Pagamentos do Mês</Text>
+            <Text style={[styles.sectionBadge, { backgroundColor: "#D1FAE5", color: "#059669" }]}>{paidInvoices.length}</Text>
+          </View>
+          
           {paidInvoices.length === 0 ? (
-            <Text style={styles.empty}>Nenhum pagamento registrado</Text>
+            <EmptyState icon="receipt-outline" title="Nenhum pagamento" subtitle="Pagamentos aparecerão aqui" />
           ) : (
-            paidInvoices.map(inv => (
-              <View key={inv.id} style={styles.paidRow}>
-                <View style={styles.paidInfo}>
-                  <Text style={styles.invoiceName} numberOfLines={1}>{inv.studentName}</Text>
-                  <Text style={styles.invoiceMeta}>
-                    {inv.paidAt ? new Date(inv.paidAt).toLocaleDateString("pt-BR") : ""} • {
-                      inv.paidMethod === "pix" ? "PIX" :
-                      inv.paidMethod === "cash" ? "Dinheiro" :
-                      inv.paidMethod === "card" ? "Cartão" : "Transferência"
-                    }
-                  </Text>
-                </View>
-                <Text style={[styles.invoiceAmount, { color: colors.green }]}>{formatCurrency(inv.amount)}</Text>
-              </View>
-            ))
+            <View style={styles.paidList}>
+              {paidInvoices.map(inv => <PaidCard key={inv.id} invoice={inv} />)}
+            </View>
           )}
         </View>
 
@@ -745,203 +680,187 @@ export default function TeacherFinanceScreen() {
   );
 }
 
+// ==================== ESTILOS ====================
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: "#F8FAFC" },
+  scrollView: { flex: 1 },
   loadingContainer: { justifyContent: "center", alignItems: "center" },
-  loadingText: { marginTop: 12, color: colors.muted, fontWeight: "600" },
+  loadingText: { marginTop: 12, color: "#64748B", fontSize: 14 },
 
-  filtersRow: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 6, gap: 10, backgroundColor: "white" },
-  monthScroll: { marginBottom: 8 },
-  monthRow: { flexDirection: "row", gap: 8 },
-  monthPill: {
-    backgroundColor: "#E3E3E3",
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  content: { padding: 16 },
+
+  // Header
+  header: { marginBottom: 20 },
+  monthsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
+  monthPill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1, borderColor: "#E2E8F0" },
+  monthPillActive: { backgroundColor: "#1E293B", borderColor: "#1E293B" },
+  monthText: { fontSize: 12, fontWeight: "700", color: "#64748B" },
+  monthTextActive: { color: "#fff" },
+  searchBox: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: "#E2E8F0", gap: 8 },
+  searchInput: { flex: 1, fontSize: 14, color: "#1E293B" },
+
+  // Stats
+  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 20 },
+  statCard: { 
+    backgroundColor: "#fff", 
+    borderRadius: 12, 
+    padding: 16, 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 12,
     borderWidth: 1,
-    borderColor: "#CFCFCF",
+    borderColor: "#E2E8F0",
+    borderLeftWidth: 4,
+    minWidth: 160,
+    flex: 1,
   },
-  monthPillActive: { backgroundColor: colors.text, borderColor: colors.text },
-  monthText: { fontWeight: "800", fontSize: 12, color: colors.text },
-  monthTextActive: { color: "white" },
+  statIconBox: { width: 40, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  statContent: { flex: 1 },
+  statTitle: { fontSize: 12, fontWeight: "600", color: "#64748B", marginBottom: 2 },
+  statValue: { fontSize: 18, fontWeight: "800" },
+  statSubtitle: { fontSize: 11, color: "#94A3B8", marginTop: 2 },
 
-  searchBox: {
-    backgroundColor: "#E3E3E3",
+  // Actions
+  actionsRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 24 },
+  quickAction: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 8, 
+    paddingHorizontal: 16, 
+    paddingVertical: 12, 
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  quickActionText: { fontSize: 13, fontWeight: "600" },
+
+  // Sections
+  section: { marginBottom: 24 },
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: "700", color: "#1E293B" },
+  sectionBadge: { 
+    backgroundColor: "#FEF3C7", 
+    color: "#D97706", 
+    fontSize: 12, 
+    fontWeight: "700", 
+    paddingHorizontal: 10, 
+    paddingVertical: 4, 
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: "#CFCFCF",
-  },
-  searchInput: { flex: 1, fontWeight: "600", color: colors.text },
-
-  content: { paddingBottom: 16 },
-
-  kpiGrid: { padding: 12, flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  kpiCard: {
-    minWidth: 140,
-    flex: 1,
-    maxWidth: 200,
-    backgroundColor: "white",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#CFCFCF",
-    padding: 14,
-  },
-  kpiTop: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
-  kpiTitle: { fontWeight: "800", color: colors.text, fontSize: 12, flex: 1 },
-  kpiValue: { fontWeight: "900", color: colors.text, fontSize: 18 },
-  kpiSub: { marginTop: 4, fontWeight: "600", color: "#666", fontSize: 11 },
-
-  tilesGrid: { padding: 12, flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  tile: {
-    minWidth: 130,
-    flex: 1,
-    maxWidth: 180,
-    backgroundColor: "white",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#CFCFCF",
-    padding: 14,
-    gap: 8,
-  },
-  tileDisabled: { opacity: 0.5 },
-  tileText: { fontWeight: "800", color: colors.text, fontSize: 12 },
-  tileTextDisabled: { color: colors.muted },
-
-  panel: {
-    marginHorizontal: 12,
-    backgroundColor: "white",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#CFCFCF",
-    padding: 14,
-    marginTop: 8,
-    marginBottom: 12,
   },
 
-  empty: { color: "#666", fontWeight: "600", paddingVertical: 16, textAlign: "center" },
+  // Cards
+  cardsList: { gap: 12 },
+  invoiceCard: { 
+    backgroundColor: "#fff", 
+    borderRadius: 12, 
+    padding: 16, 
+    borderWidth: 1, 
+    borderColor: "#E2E8F0",
+  },
+  invoiceHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 14 },
+  invoiceInfo: { flex: 1 },
+  invoiceName: { fontSize: 15, fontWeight: "700", color: "#1E293B" },
+  invoiceMeta: { fontSize: 12, color: "#64748B", marginTop: 4 },
+  invoiceAmountBox: { alignItems: "flex-end" },
+  invoiceAmount: { fontSize: 18, fontWeight: "800", color: "#1E293B" },
+  statusBadge: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginTop: 6 },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  statusText: { fontSize: 11, fontWeight: "700" },
+  invoiceActions: { flexDirection: "row", gap: 10 },
+  invoiceBtn: { 
+    flex: 1, 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "center", 
+    gap: 6, 
+    paddingVertical: 10, 
+    borderRadius: 8, 
+    backgroundColor: "#F1F5F9",
+  },
+  invoiceBtnPrimary: { backgroundColor: colors.green },
+  invoiceBtnText: { fontSize: 13, fontWeight: "600", color: colors.purple },
 
-  invoiceRow: { paddingVertical: 12 },
-  invoiceInfo: { flex: 1, minWidth: 0 },
-  divider: { height: 1, backgroundColor: "#E6E6E6", marginTop: 12 },
-  invoiceName: { fontWeight: "800", color: colors.text, fontSize: 14 },
-  invoiceMeta: { fontWeight: "600", color: "#666", fontSize: 11, marginTop: 4 },
-  invoiceRight: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
-  invoiceAmount: { fontWeight: "900", color: colors.text, fontSize: 15 },
-  invoiceActions: { marginTop: 10, flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  
-  smallBtn: {
-    backgroundColor: "#EEEEEE",
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: "#CFCFCF",
-    minWidth: 60,
-    alignItems: "center",
-  },
-  smallBtnDark: { backgroundColor: colors.green, borderColor: colors.green },
-  smallBtnText: { fontWeight: "800", color: colors.text, fontSize: 11 },
+  // Paid List
+  paidList: { backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#E2E8F0", overflow: "hidden" },
+  paidCard: { flexDirection: "row", alignItems: "center", padding: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
+  paidIcon: { marginRight: 12 },
+  paidInfo: { flex: 1 },
+  paidName: { fontSize: 14, fontWeight: "600", color: "#1E293B" },
+  paidMeta: { fontSize: 12, color: "#64748B", marginTop: 2 },
+  paidAmount: { fontSize: 15, fontWeight: "700", color: "#059669" },
 
-  paidRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E6E6E6",
-  },
-  paidInfo: { flex: 1, minWidth: 0 },
+  // Empty State
+  emptyState: { alignItems: "center", paddingVertical: 40, backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#E2E8F0" },
+  emptyTitle: { fontSize: 15, fontWeight: "600", color: "#64748B", marginTop: 12 },
+  emptySubtitle: { fontSize: 13, color: "#94A3B8", marginTop: 4 },
 
-  // Modal
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
-  modalScrollContent: { flexGrow: 1, justifyContent: "center", padding: 20 },
-  modal: {
-    backgroundColor: colors.bg,
-    borderRadius: 18,
-    padding: 24,
-    width: "90%",
-    maxWidth: 400,
-  },
-  modalTitle: { fontSize: 20, fontWeight: "800", color: colors.text, textAlign: "center", marginBottom: 20 },
-  inputLabel: { fontSize: 13, fontWeight: "600", color: colors.muted, marginBottom: 6, marginTop: 12 },
-  input: {
-    backgroundColor: "#f5f5f5",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: colors.text,
+  // Modals
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center" },
+  modalScroll: { flexGrow: 1, justifyContent: "center", padding: 20 },
+  modal: { backgroundColor: "#fff", borderRadius: 16, padding: 24, width: "90%", maxWidth: 400 },
+  modalTitle: { fontSize: 18, fontWeight: "700", color: "#1E293B", textAlign: "center", marginBottom: 20 },
+  inputLabel: { fontSize: 13, fontWeight: "600", color: "#64748B", marginBottom: 6, marginTop: 12 },
+  input: { backgroundColor: "#F8FAFC", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: "#1E293B", borderWidth: 1, borderColor: "#E2E8F0" },
+  chipsScroll: { marginVertical: 4 },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: "#F1F5F9", marginRight: 8, borderWidth: 1, borderColor: "#E2E8F0" },
+  chipSelected: { backgroundColor: colors.purple, borderColor: colors.purple },
+  chipText: { fontSize: 13, fontWeight: "600", color: "#1E293B" },
+  chipTextSelected: { color: "#fff" },
+  methodsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
+  methodBtn: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 6, 
+    paddingHorizontal: 14, 
+    paddingVertical: 10, 
+    borderRadius: 10, 
+    backgroundColor: "#F1F5F9",
     borderWidth: 1,
-    borderColor: "#E0E0E0",
+    borderColor: "#E2E8F0",
   },
-  studentsScroll: { maxHeight: 50, marginTop: 4 },
-  studentChip: {
-    backgroundColor: "#f5f5f5",
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-  },
-  studentChipSelected: { backgroundColor: colors.purple, borderColor: colors.purple },
-  studentChipText: { fontSize: 13, fontWeight: "600", color: colors.text },
-  studentChipTextSelected: { color: "#fff" },
-  methodsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
-  methodChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#f5f5f5",
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-  },
-  methodChipSelected: { backgroundColor: colors.purple, borderColor: colors.purple },
-  methodChipText: { fontSize: 12, fontWeight: "600", color: colors.text },
-  methodChipTextSelected: { color: "#fff" },
-  invoiceSummary: { alignItems: "center", marginBottom: 16, padding: 12, backgroundColor: "#f5f5f5", borderRadius: 10 },
-  invoiceSummaryName: { fontSize: 16, fontWeight: "700", color: colors.text },
-  invoiceSummaryAmount: { fontSize: 24, fontWeight: "900", color: colors.purple, marginTop: 4 },
-  pixCodeBox: { backgroundColor: "#f5f5f5", borderRadius: 10, padding: 12, marginTop: 8 },
-  pixCodeLabel: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: 6 },
-  pixCode: { fontSize: 11, fontFamily: "monospace", color: colors.text, lineHeight: 16 },
-  batchInfo: { fontSize: 14, color: colors.text, marginBottom: 8, textAlign: "center" },
-  modalActions: { flexDirection: "row", gap: 12, marginTop: 20 },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 10,
-    backgroundColor: "#f5f5f5",
-    alignItems: "center",
-  },
-  cancelBtnText: { fontSize: 15, fontWeight: "600", color: colors.muted },
-  confirmBtn: {
-    flex: 1,
-    flexDirection: "row",
-    paddingVertical: 14,
-    borderRadius: 10,
-    backgroundColor: colors.purple,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  confirmBtnText: { fontSize: 15, fontWeight: "700", color: "#fff" },
+  methodBtnActive: { backgroundColor: colors.purple, borderColor: colors.purple },
+  methodBtnText: { fontSize: 12, fontWeight: "600", color: "#1E293B" },
+  methodBtnTextActive: { color: "#fff" },
+  invoiceSummary: { alignItems: "center", padding: 16, backgroundColor: "#F8FAFC", borderRadius: 12, marginBottom: 16 },
+  summaryName: { fontSize: 15, fontWeight: "600", color: "#1E293B" },
+  summaryAmount: { fontSize: 24, fontWeight: "800", color: colors.purple, marginTop: 4 },
+  pixHeader: { alignItems: "center", marginBottom: 16 },
+  pixBox: { backgroundColor: "#F8FAFC", borderRadius: 10, padding: 14, marginBottom: 16 },
+  pixLabel: { fontSize: 12, fontWeight: "600", color: "#64748B", marginBottom: 6 },
+  pixCode: { fontSize: 11, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace", color: "#1E293B", lineHeight: 18 },
+  batchInfo: { fontSize: 14, color: "#64748B", textAlign: "center", marginBottom: 16, lineHeight: 20 },
+  modalBtns: { flexDirection: "row", gap: 12, marginTop: 20 },
+  btnSecondary: { flex: 1, paddingVertical: 14, borderRadius: 10, backgroundColor: "#F1F5F9", alignItems: "center" },
+  btnSecondaryText: { fontSize: 15, fontWeight: "600", color: "#64748B" },
+  btnPrimary: { flex: 1, flexDirection: "row", paddingVertical: 14, borderRadius: 10, backgroundColor: colors.purple, alignItems: "center", justifyContent: "center", gap: 8 },
+  btnPrimaryText: { fontSize: 15, fontWeight: "600", color: "#fff" },
 });
 
 // Desktop Styles
-const desktopStyles = StyleSheet.create({
+const dkStyles = StyleSheet.create({
   screen: { backgroundColor: "#F8FAFC" },
-  filtersRow: { maxWidth: 600, paddingHorizontal: 24 },
-  content: { maxWidth: 900, paddingHorizontal: 24 },
-  kpiGrid: { maxWidth: 700, gap: 12 },
-  tilesGrid: { maxWidth: 600, gap: 12 },
-  panel: { maxWidth: 650 },
+  content: { padding: 24, paddingBottom: 40 },
+  header: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 16,
+    marginBottom: 24,
+  },
+  statsGrid: { 
+    flexDirection: "row", 
+    flexWrap: "wrap", 
+    gap: 16,
+    marginBottom: 24,
+  },
+  actionsRow: { 
+    gap: 12,
+    marginBottom: 28,
+  },
+  section: { 
+    maxWidth: 800,
+    marginBottom: 28,
+  },
 });
