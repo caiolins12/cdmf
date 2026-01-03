@@ -668,7 +668,7 @@ export default function MasterClassesScreen() {
         </Pressable>
       </Modal>
 
-      <View style={styles.searchBox}>
+      <View style={[styles.searchBox, isDesktopMode && desktopStyles.searchBox]}>
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color="#777" style={styles.searchIcon} />
           <TextInput
@@ -684,13 +684,13 @@ export default function MasterClassesScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
+      <View style={[styles.statsRow, isDesktopMode && desktopStyles.statsRow]}>
+        <View style={[styles.statCard, isDesktopMode && desktopStyles.statCard]}>
           <FontAwesome5 name="users" size={20} color={colors.purple} />
           <Text style={styles.statNumber}>{classes.filter(c => c.active).length}</Text>
           <Text style={styles.statLabel}>Turmas Ativas</Text>
         </View>
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, isDesktopMode && desktopStyles.statCard]}>
           <FontAwesome5 name="user-graduate" size={20} color={colors.purple} />
           <Text style={styles.statNumber}>
             {classes.reduce((sum, c) => sum + (c.studentIds?.length || 0), 0)}
@@ -699,7 +699,7 @@ export default function MasterClassesScreen() {
         </View>
       </View>
 
-      <View style={styles.listContainer}>
+      <View style={[styles.listContainer, isDesktopMode && desktopStyles.listContainer]}>
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.purple} />
@@ -726,7 +726,7 @@ export default function MasterClassesScreen() {
               </View>
             ) : (
               filteredClasses.map(classItem => (
-                <View key={classItem.id} style={styles.classCard}>
+                <View key={classItem.id} style={[styles.classCard, isDesktopMode && desktopStyles.classCard]}>
                   <View style={styles.classHeader}>
                     <View style={styles.classInfo}>
                       <View style={styles.classNameRow}>
@@ -1034,15 +1034,17 @@ const styles = StyleSheet.create({
   },
   classActions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     borderTopWidth: 1,
     borderTopColor: "#E8E8E8",
   },
   classActionBtn: {
-    flex: 1,
+    minWidth: 90,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     gap: 4,
   },
   classActionText: {
@@ -1051,11 +1053,12 @@ const styles = StyleSheet.create({
     color: colors.purple,
   },
   classActionBtnDanger: {
-    flex: 1,
+    minWidth: 90,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     gap: 4,
   },
   classActionTextDanger: {
@@ -1078,10 +1081,10 @@ const styles = StyleSheet.create({
   },
   createModal: {
     backgroundColor: colors.bg,
-    borderRadius: 20,
+    borderRadius: 18,
     padding: 24,
     width: "100%",
-    maxWidth: 360,
+    maxWidth: 400,
   },
   modalTitle: {
     fontSize: 20,
@@ -1141,12 +1144,13 @@ const styles = StyleSheet.create({
   },
   daysRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 6,
   },
   dayChip: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "#f5f5f5",
     alignItems: "center",
     justifyContent: "center",
@@ -1175,31 +1179,34 @@ const styles = StyleSheet.create({
   },
   modalActions: {
     flexDirection: "row",
-    gap: 12,
+    flexWrap: "wrap",
+    gap: 10,
     marginTop: 10,
   },
   cancelBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
+    minWidth: 120,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
     backgroundColor: "#f5f5f5",
     alignItems: "center",
   },
   cancelBtnText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
     color: colors.muted,
   },
   createBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
+    minWidth: 140,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
     backgroundColor: colors.purple,
     alignItems: "center",
     justifyContent: "center",
   },
   createBtnText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
     color: "#fff",
   },
@@ -1207,10 +1214,10 @@ const styles = StyleSheet.create({
   // Students Modal
   studentsModal: {
     backgroundColor: colors.bg,
-    borderRadius: 20,
+    borderRadius: 18,
     padding: 24,
     width: "90%",
-    maxWidth: 360,
+    maxWidth: 420,
     maxHeight: "80%",
   },
   studentsList: {
@@ -1275,10 +1282,10 @@ const styles = StyleSheet.create({
   // Student Details Modal
   studentDetailsModal: {
     backgroundColor: colors.bg,
-    borderRadius: 20,
+    borderRadius: 18,
     padding: 24,
     width: "90%",
-    maxWidth: 340,
+    maxWidth: 380,
     alignItems: "center",
   },
   studentAvatar: {
@@ -1395,6 +1402,24 @@ const styles = StyleSheet.create({
 const desktopStyles = StyleSheet.create({
   screen: {
     backgroundColor: "#F8FAFC",
+  },
+  searchBox: {
+    maxWidth: 500,
+    paddingHorizontal: 24,
+  },
+  statsRow: {
+    maxWidth: 400,
+    paddingHorizontal: 24,
+  },
+  statCard: {
+    maxWidth: 180,
+  },
+  listContainer: {
+    maxWidth: 700,
+    marginHorizontal: 24,
+  },
+  classCard: {
+    maxWidth: 600,
   },
 });
 

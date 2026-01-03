@@ -35,12 +35,14 @@ export default function TileButton({ label, icon, onPress }: Props) {
 const styles = StyleSheet.create({
   box: {
     backgroundColor: colors.grayCard,
-    borderRadius: 22,
-    paddingVertical: 20,
+    borderRadius: 20,
+    paddingVertical: 18,
     paddingHorizontal: 10,
     alignItems: "center",
     justifyContent: "center",
-    height: 120,
+    height: 110,
+    minWidth: 130,
+    maxWidth: 180,
   },
   icon: { opacity: 0.9, marginBottom: 8 },
   label: { 

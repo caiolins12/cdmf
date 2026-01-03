@@ -496,7 +496,7 @@ export default function MasterTeachersScreen() {
         </Pressable>
       </Modal>
 
-      <View style={styles.searchBox}>
+      <View style={[styles.searchBox, isDesktopMode && desktopStyles.searchBox]}>
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color="#777" style={styles.searchIcon} />
           <TextInput
@@ -512,18 +512,18 @@ export default function MasterTeachersScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
+      <View style={[styles.statsRow, isDesktopMode && desktopStyles.statsRow]}>
+        <View style={[styles.statCard, isDesktopMode && desktopStyles.statCard]}>
           <Text style={styles.statNumber}>{activeTeachers.length}</Text>
           <Text style={styles.statLabel}>Ativos</Text>
         </View>
-        <View style={[styles.statCard, styles.statCardInactive]}>
+        <View style={[styles.statCard, styles.statCardInactive, isDesktopMode && desktopStyles.statCard]}>
           <Text style={[styles.statNumber, styles.statNumberInactive]}>{inactiveTeachers.length}</Text>
           <Text style={styles.statLabel}>Inativos</Text>
         </View>
       </View>
 
-      <View style={styles.listContainer}>
+      <View style={[styles.listContainer, isDesktopMode && desktopStyles.listContainer]}>
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.purple} />
@@ -758,10 +758,10 @@ const styles = StyleSheet.create({
   },
   createModal: {
     backgroundColor: colors.bg,
-    borderRadius: 20,
+    borderRadius: 18,
     padding: 24,
     width: "90%",
-    maxWidth: 360,
+    maxWidth: 380,
   },
   modalTitle: {
     fontSize: 20,
@@ -806,30 +806,33 @@ const styles = StyleSheet.create({
   },
   modalActions: {
     flexDirection: "row",
-    gap: 12,
+    gap: 10,
+    flexWrap: "wrap",
   },
   cancelBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
+    minWidth: 120,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
     backgroundColor: "#f5f5f5",
     alignItems: "center",
   },
   cancelBtnText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
     color: colors.muted,
   },
   createBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
+    minWidth: 140,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
     backgroundColor: colors.purple,
     alignItems: "center",
     justifyContent: "center",
   },
   createBtnText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
     color: "#fff",
   },
@@ -837,10 +840,10 @@ const styles = StyleSheet.create({
   // Credentials modal
   credentialsModal: {
     backgroundColor: colors.bg,
-    borderRadius: 20,
+    borderRadius: 18,
     padding: 24,
     width: "90%",
-    maxWidth: 360,
+    maxWidth: 380,
     alignItems: "center",
   },
   successIcon: {
@@ -904,10 +907,10 @@ const styles = StyleSheet.create({
   // Classes modal
   classesModal: {
     backgroundColor: colors.bg,
-    borderRadius: 20,
+    borderRadius: 18,
     padding: 24,
     width: "90%",
-    maxWidth: 360,
+    maxWidth: 400,
     maxHeight: "70%",
   },
   classesHeader: {
@@ -1012,10 +1015,10 @@ const styles = StyleSheet.create({
   // Add Class Modal
   addClassModal: {
     backgroundColor: colors.bg,
-    borderRadius: 20,
+    borderRadius: 18,
     padding: 24,
     width: "90%",
-    maxWidth: 360,
+    maxWidth: 400,
     maxHeight: "70%",
   },
   addClassModalTitle: {
@@ -1085,5 +1088,20 @@ const styles = StyleSheet.create({
 const desktopStyles = StyleSheet.create({
   screen: {
     backgroundColor: "#F8FAFC",
+  },
+  searchBox: {
+    maxWidth: 500,
+    paddingHorizontal: 24,
+  },
+  statsRow: {
+    maxWidth: 350,
+    paddingHorizontal: 24,
+  },
+  statCard: {
+    maxWidth: 150,
+  },
+  listContainer: {
+    maxWidth: 700,
+    marginHorizontal: 24,
   },
 });

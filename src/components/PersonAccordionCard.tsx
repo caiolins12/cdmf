@@ -134,6 +134,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#CFCFCF",
     overflow: "hidden",
+    maxWidth: 600,
   },
 
   headerRow: {
@@ -142,6 +143,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    flexWrap: "wrap",
   },
 
   headerLeft: {
@@ -166,6 +168,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    flexWrap: "wrap",
   },
 
   metaText: {
@@ -199,16 +202,20 @@ const styles = StyleSheet.create({
   },
 
   actions: {
-    gap: 10,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
   },
 
   btn: {
     backgroundColor: "#EEEEEE",
     borderRadius: 999,
-    paddingVertical: 9,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#CFCFCF",
+    minWidth: 100,
   },
 
   btnText: {

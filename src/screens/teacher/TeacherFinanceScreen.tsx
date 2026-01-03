@@ -143,7 +143,7 @@ export default function TeacherFinanceScreen() {
       {!isDesktopMode && <SectionHeader title="Financeiro" />}
 
       {/* Filtros */}
-      <View style={styles.filtersRow}>
+      <View style={[styles.filtersRow, isDesktopMode && desktopStyles.filtersRow]}>
         <View style={styles.monthRow}>
           {(["NOV/2025", "OUT/2025", "SET/2025"] as const).map((m) => {
             const active = m === month;
@@ -171,9 +171,9 @@ export default function TeacherFinanceScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, isDesktopMode && desktopStyles.content]} showsVerticalScrollIndicator={false}>
         {/* KPI / Resumo do mês */}
-        <View style={styles.kpiGrid}>
+        <View style={[styles.kpiGrid, isDesktopMode && desktopStyles.kpiGrid]}>
           <KpiCard
             title="Recebido no mês"
             value={brl(summary.received)}
@@ -202,7 +202,7 @@ export default function TeacherFinanceScreen() {
 
         {/* Atalhos */}
         <SectionHeader title="Atalhos" />
-        <View style={styles.tilesGrid}>
+        <View style={[styles.tilesGrid, isDesktopMode && desktopStyles.tilesGrid]}>
           <ActionTile label="Registrar pagamento" icon="add-circle-outline" onPress={onRegisterPayment} />
           <ActionTile label="Gerar cobrança / PIX" icon="qr-code-outline" onPress={onCreateCharge} />
           <ActionTile label="Despesas" icon="receipt-outline" onPress={onExpenses} />
@@ -211,7 +211,7 @@ export default function TeacherFinanceScreen() {
 
         {/* Pendências */}
         <SectionHeader title="Pendências do mês" />
-        <View style={styles.panel}>
+        <View style={[styles.panel, isDesktopMode && desktopStyles.panel]}>
           {filteredInvoices.length === 0 ? (
             <Text style={styles.empty}>Nenhum aluno encontrado.</Text>
           ) : (
@@ -255,7 +255,7 @@ export default function TeacherFinanceScreen() {
 
         {/* Últimos pagamentos */}
         <SectionHeader title="Últimos pagamentos" />
-        <View style={styles.panel}>
+        <View style={[styles.panel, isDesktopMode && desktopStyles.panel]}>
           {paid.map((p) => (
             <View key={p.id} style={styles.paidRow}>
               <View style={{ flex: 1, minWidth: 0 }}>
@@ -318,7 +318,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   kpiCard: {
-    width: "48%",
+    minWidth: 140,
+    flex: 1,
+    maxWidth: 200,
     backgroundColor: "white",
     borderRadius: 14,
     borderWidth: 1,
@@ -337,7 +339,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   tile: {
-    width: "48%",
+    minWidth: 130,
+    flex: 1,
+    maxWidth: 180,
     backgroundColor: "white",
     borderRadius: 14,
     borderWidth: 1,
@@ -373,10 +377,12 @@ const styles = StyleSheet.create({
   smallBtn: {
     backgroundColor: "#EEEEEE",
     borderRadius: 999,
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: "#CFCFCF",
+    minWidth: 80,
+    alignItems: "center",
   },
   smallBtnDark: { backgroundColor: colors.text, borderColor: colors.text },
   smallBtnText: { fontWeight: "900", color: colors.text, fontSize: 11 },
@@ -395,5 +401,32 @@ const styles = StyleSheet.create({
 const desktopStyles = StyleSheet.create({
   screen: {
     backgroundColor: "#F8FAFC",
+  },
+  filtersRow: {
+    maxWidth: 600,
+    paddingHorizontal: 24,
+  },
+  content: {
+    maxWidth: 900,
+    paddingHorizontal: 24,
+  },
+  kpiGrid: {
+    maxWidth: 700,
+    gap: 12,
+  },
+  kpiCard: {
+    minWidth: 150,
+    maxWidth: 180,
+  },
+  tilesGrid: {
+    maxWidth: 600,
+    gap: 12,
+  },
+  tile: {
+    minWidth: 140,
+    maxWidth: 160,
+  },
+  panel: {
+    maxWidth: 650,
   },
 });

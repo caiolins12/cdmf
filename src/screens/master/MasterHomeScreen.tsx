@@ -505,7 +505,8 @@ const dk = StyleSheet.create({
   scrollContent: {
     padding: 32,
     paddingTop: 24,
-    maxWidth: 1400,
+    maxWidth: 1200,
+    alignSelf: "flex-start",
   },
 
   // Welcome Header
@@ -527,17 +528,20 @@ const dk = StyleSheet.create({
   // Stats Row
   statsRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 16,
     marginBottom: 32,
+    maxWidth: 900,
   },
   statCard: {
-    flex: 1,
+    minWidth: 180,
+    maxWidth: 220,
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
-    padding: 20,
+    padding: 16,
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 12,
     borderWidth: 1,
     borderColor: "#E2E8F0",
     shadowColor: "#64748B",
@@ -615,12 +619,14 @@ const dk = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 16,
+    maxWidth: 900,
   },
   actionCard: {
-    width: 240,
+    minWidth: 200,
+    maxWidth: 220,
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
-    padding: 20,
+    padding: 18,
     borderWidth: 1,
     borderColor: "#E2E8F0",
     shadowColor: "#64748B",
@@ -665,6 +671,7 @@ const dk = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: "#E2E8F0",
+    maxWidth: 600,
   },
   activityItem: {
     flexDirection: "row",

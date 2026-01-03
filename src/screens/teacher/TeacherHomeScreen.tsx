@@ -138,6 +138,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#4CAF50",
     paddingVertical: 10,
     gap: 8,
+    flexWrap: "wrap",
   },
   teacherBadgeText: {
     color: "#fff",
@@ -160,12 +161,15 @@ const styles = StyleSheet.create({
 
   statsRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     paddingHorizontal: 16,
     paddingTop: 16,
     gap: 12,
+    maxWidth: 400,
   },
   statCard: {
-    flex: 1,
+    minWidth: 140,
+    maxWidth: 180,
     backgroundColor: "#F5F5F5",
     borderRadius: 16,
     padding: 18,
@@ -194,8 +198,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontWeight: "900", color: colors.text },
   
-  grid: { padding: 16, paddingTop: 18 },
-  row: { flexDirection: "row" },
+  grid: { padding: 16, paddingTop: 18, maxWidth: 500 },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 14 },
   
   version: { textAlign: "center", color: colors.muted, marginTop: 8 },
   
