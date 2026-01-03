@@ -6,6 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, AuthContext } from "./src/contexts/AuthContext";
 import { DesktopProvider } from "./src/contexts/DesktopContext";
 import { ThemeProvider } from "./src/contexts/ThemeContext";
+import { PaymentProvider } from "./src/contexts/PaymentContext";
 
 const isWeb = Platform.OS === "web";
 
@@ -124,9 +125,11 @@ const AppContent = memo(function AppContent() {
     <ThemeProvider>
       <DesktopProvider>
         <AuthProvider>
-          <NavigationContainer {...navigationProps}>
-            <Routes />
-          </NavigationContainer>
+          <PaymentProvider>
+            <NavigationContainer {...navigationProps}>
+              <Routes />
+            </NavigationContainer>
+          </PaymentProvider>
         </AuthProvider>
       </DesktopProvider>
     </ThemeProvider>
