@@ -12,6 +12,7 @@ import {
   TouchableWithoutFeedback,
   Animated,
   Dimensions,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
@@ -45,6 +46,7 @@ type OnboardingData = {
 type Props = {
   visible: boolean;
   onComplete: (data: OnboardingData) => Promise<void>;
+  onSwitchAccount?: () => void; // Callback para trocar de conta
   initialData?: {
     phone?: string;
     birthDate?: string;
@@ -55,7 +57,7 @@ type Props = {
   isEditing?: boolean;
 };
 
-export default function OnboardingSurveyModal({ visible, onComplete, initialData, isEditing }: Props) {
+export default function OnboardingSurveyModal({ visible, onComplete, onSwitchAccount, initialData, isEditing }: Props) {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -74,9 +76,17 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
   const [birthDateInput, setBirthDateInput] = useState("");
   const [genderInput, setGenderInput] = useState("");
   const [dancePreferenceInput, setDancePreferenceInput] = useState("");
+  
+  // Mensagem inline (para web onde Alert não funciona)
+  const [inlineMessage, setInlineMessage] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
 
   // Animação
   const translateY = useRef(new Animated.Value(0)).current;
+  
+  // Refs para inputs
+  const phoneInputRef = useRef<TextInput>(null);
+  const codeInputRef = useRef<TextInput>(null);
+  const birthInputRef = useRef<TextInput>(null);
 
   // Monitora teclado
   useEffect(() => {
@@ -85,7 +95,7 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
       Animated.timing(translateY, {
         toValue: -e.endCoordinates.height * 0.4,
         duration: 250,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== "web",
       }).start();
     });
     
@@ -94,7 +104,7 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
       Animated.timing(translateY, {
         toValue: 0,
         duration: 250,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== "web",
       }).start();
     });
 
@@ -134,6 +144,37 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
       setCountdown(0);
     }
   }, [visible]);
+
+  // Auto-focus no input de telefone quando o modal abre
+  useEffect(() => {
+    if (visible && step === 1 && !phoneVerified) {
+      // Delay para garantir que o modal está renderizado
+      const timer = setTimeout(() => {
+        phoneInputRef.current?.focus();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [visible, step, phoneVerified]);
+
+  // Auto-focus no input de código quando muda para modo de verificação
+  useEffect(() => {
+    if (codeSent && !phoneVerified) {
+      const timer = setTimeout(() => {
+        codeInputRef.current?.focus();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [codeSent, phoneVerified]);
+
+  // Auto-focus no input de data quando muda para step 2
+  useEffect(() => {
+    if (step === 2) {
+      const timer = setTimeout(() => {
+        birthInputRef.current?.focus();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [step]);
 
   // Countdown para reenviar código
   useEffect(() => {
@@ -203,11 +244,22 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
     return Math.floor(100000 + Math.random() * 900000).toString();
   };
 
+  // Alert cross-platform
+  const showAlert = (title: string, message: string, type: "success" | "error" | "info" = "info") => {
+    if (Platform.OS === "web") {
+      setInlineMessage({ type, text: `${title}: ${message}` });
+      // Limpa mensagem após 5 segundos
+      setTimeout(() => setInlineMessage(null), 5000);
+    } else {
+      Alert.alert(title, message);
+    }
+  };
+
   // Enviar código SMS
   const handleSendCode = async () => {
     const phoneNumbers = phoneInput.replace(/\D/g, "");
     if (phoneNumbers.length < 10) {
-      Alert.alert("Telefone inválido", "Por favor, insira um telefone válido com DDD.");
+      showAlert("Telefone inválido", "Por favor, insira um telefone válido com DDD.", "error");
       return;
     }
 
@@ -220,16 +272,14 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      Alert.alert(
-        "Código enviado! 📱",
-        `Para fins de teste, seu código é: ${code}\n\nEm produção, este código será enviado via SMS.`,
-        [{ text: "OK" }]
-      );
+      // Em produção, enviar SMS real aqui
+      // Por enquanto, mostra o código para teste
+      showAlert("Código enviado! 📱", `Para teste, seu código é: ${code}`, "success");
 
       setCodeSent(true);
       setCountdown(60);
     } catch (error) {
-      Alert.alert("Erro", "Não foi possível enviar o código. Tente novamente.");
+      showAlert("Erro", "Não foi possível enviar o código. Tente novamente.", "error");
     } finally {
       setSendingCode(false);
     }
@@ -240,7 +290,7 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
     const code = codeToVerify || verificationCode;
     
     if (code.length !== 6) {
-      Alert.alert("Código inválido", "O código deve ter 6 dígitos.");
+      showAlert("Código inválido", "O código deve ter 6 dígitos.", "error");
       return;
     }
 
@@ -251,9 +301,10 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
       if (code === generatedCode) {
         setPhoneVerified(true);
         setCodeSent(false);
-        Alert.alert("Verificado! ✅", "Telefone verificado! Toque em Continuar.");
+        setInlineMessage(null); // Limpa qualquer mensagem anterior
+        showAlert("Verificado! ✅", "Telefone verificado! Toque em Continuar.", "success");
       } else {
-        Alert.alert("Código incorreto", "Tente novamente.");
+        showAlert("Código incorreto", "Tente novamente.", "error");
         setVerificationCode("");
       }
       setVerifying(false);
@@ -288,7 +339,7 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
         dancePreference: dancePreferenceInput || undefined,
       });
     } catch (error) {
-      Alert.alert("Erro", "Não foi possível salvar. Tente novamente.");
+      showAlert("Erro", "Não foi possível salvar. Tente novamente.", "error");
     } finally {
       setSaving(false);
     }
@@ -305,7 +356,7 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
       }
 
       if (!phoneVerified) {
-        Alert.alert("Verificação necessária", "Verifique seu telefone antes de continuar.");
+        showAlert("Verificação necessária", "Verifique seu telefone antes de continuar.", "error");
         return;
       }
       
@@ -323,7 +374,7 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
   // Pular passos opcionais
   const handleFinishEarly = () => {
     if (step === 1 && !phoneVerified) {
-      Alert.alert("Telefone obrigatório", "Precisamos do seu telefone para contato.");
+      showAlert("Telefone obrigatório", "Precisamos do seu telefone para contato.", "error");
       return;
     }
     handleSave();
@@ -331,11 +382,21 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
 
   if (!visible) return null;
 
+  // Handler para fechar teclado apenas no overlay (não no conteúdo)
+  const handleOverlayPress = () => {
+    Keyboard.dismiss();
+  };
+
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.overlay}>
-          <Animated.View style={[styles.modal, { transform: [{ translateY }] }]}>
+      <View style={styles.overlay}>
+        {/* Área clicável para fechar teclado - apenas o fundo */}
+        <TouchableWithoutFeedback onPress={handleOverlayPress}>
+          <View style={StyleSheet.absoluteFill} />
+        </TouchableWithoutFeedback>
+        
+        {/* Modal content - não intercepta cliques para o teclado */}
+        <Animated.View style={[styles.modal, { transform: [{ translateY }] }]}>
             {/* Header compacto */}
             <View style={styles.header}>
               <Text style={styles.emoji}>
@@ -353,6 +414,31 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
               </View>
             </View>
 
+            {/* Mensagem inline (para web) */}
+            {inlineMessage && (
+              <View style={[
+                styles.inlineMessage,
+                inlineMessage.type === "success" && styles.inlineMessageSuccess,
+                inlineMessage.type === "error" && styles.inlineMessageError,
+              ]}>
+                <Ionicons 
+                  name={inlineMessage.type === "success" ? "checkmark-circle" : inlineMessage.type === "error" ? "alert-circle" : "information-circle"} 
+                  size={18} 
+                  color={inlineMessage.type === "success" ? "#15803D" : inlineMessage.type === "error" ? "#DC2626" : "#2563EB"} 
+                />
+                <Text style={[
+                  styles.inlineMessageText,
+                  inlineMessage.type === "success" && styles.inlineMessageTextSuccess,
+                  inlineMessage.type === "error" && styles.inlineMessageTextError,
+                ]}>
+                  {inlineMessage.text}
+                </Text>
+                <Pressable onPress={() => setInlineMessage(null)} style={styles.inlineMessageClose}>
+                  <Ionicons name="close" size={16} color="#64748B" />
+                </Pressable>
+              </View>
+            )}
+
             {/* Content */}
             <View style={styles.content}>
               {/* Etapa 1: Telefone */}
@@ -362,6 +448,9 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
                   <Text style={styles.stepDescription}>Para avisar sobre suas aulas 🎉</Text>
 
                   <TextInput
+                    ref={phoneInputRef}
+                    id="onboarding-phone"
+                    name="onboarding-phone"
                     style={[styles.textInput, phoneVerified && styles.textInputVerified]}
                     placeholder="(00) 00000-0000"
                     placeholderTextColor="#999"
@@ -370,6 +459,8 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
                     keyboardType="phone-pad"
                     maxLength={15}
                     editable={!phoneVerified}
+                    autoFocus={Platform.OS !== "web"}
+                    autoComplete="tel"
                   />
 
                   {phoneVerified && (
@@ -393,7 +484,18 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
 
                   {codeSent && !phoneVerified && (
                     <>
+                      {/* Mostra código de teste na interface */}
+                      {generatedCode && (
+                        <View style={styles.testCodeBox}>
+                          <Text style={styles.testCodeLabel}>Código de teste:</Text>
+                          <Text style={styles.testCodeValue}>{generatedCode}</Text>
+                        </View>
+                      )}
+                      
                       <TextInput
+                        ref={codeInputRef}
+                        id="verification-code"
+                        name="verification-code"
                         style={styles.codeInput}
                         placeholder="000000"
                         placeholderTextColor="#ccc"
@@ -401,7 +503,7 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
                         onChangeText={handleCodeChange}
                         keyboardType="number-pad"
                         maxLength={6}
-                        autoFocus
+                        autoComplete="one-time-code"
                       />
 
                       <Pressable
@@ -431,6 +533,9 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
                   <Text style={styles.stepDescription}>Surpresas no seu aniversário! 🎁</Text>
 
                   <TextInput
+                    ref={birthInputRef}
+                    id="onboarding-birthdate"
+                    name="onboarding-birthdate"
                     style={styles.textInput}
                     placeholder="DD/MM/AAAA"
                     placeholderTextColor="#999"
@@ -438,6 +543,7 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
                     onChangeText={(text) => setBirthDateInput(formatBirthDate(text))}
                     keyboardType="number-pad"
                     maxLength={10}
+                    autoComplete="bday"
                   />
 
                   <Pressable onPress={() => setStep(3)} style={styles.skipButton}>
@@ -516,14 +622,24 @@ export default function OnboardingSurveyModal({ visible, onComplete, initialData
               </Pressable>
             </View>
 
-            {step > 1 && (
+            {step > 1 && !isEditing && (
               <Pressable onPress={handleFinishEarly} style={styles.finishEarlyBtn}>
                 <Text style={styles.finishEarlyText}>Pular opcionais e finalizar</Text>
               </Pressable>
             )}
+            
+            {/* Botão para trocar de conta - SEMPRE visível se não estiver editando */}
+            {!isEditing && onSwitchAccount && (
+              <View style={styles.switchAccountContainer}>
+                <View style={styles.switchAccountDivider} />
+                <Pressable onPress={onSwitchAccount} style={styles.switchAccountBtn}>
+                  <Ionicons name="log-out-outline" size={18} color="#fff" />
+                  <Text style={styles.switchAccountText}>Sair e usar outra conta</Text>
+                </Pressable>
+              </View>
+            )}
           </Animated.View>
         </View>
-      </TouchableWithoutFeedback>
     </Modal>
   );
 }
@@ -650,7 +766,28 @@ const styles = StyleSheet.create({
     color: colors.text,
     textAlign: "center",
     letterSpacing: 8,
+    marginTop: 12,
+  },
+  testCodeBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
     marginTop: 16,
+    gap: 8,
+  },
+  testCodeLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#92400E",
+  },
+  testCodeValue: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#D97706",
+    letterSpacing: 4,
   },
 
   resendButton: {
@@ -777,5 +914,61 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: colors.muted,
+  },
+  switchAccountContainer: {
+    marginTop: 24,
+    width: "100%",
+  },
+  switchAccountDivider: {
+    height: 1,
+    backgroundColor: "#E5E5E5",
+    marginBottom: 16,
+  },
+  switchAccountBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: "#DC2626",
+  },
+  switchAccountText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  // Inline message styles
+  inlineMessage: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#EFF6FF",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginBottom: 16,
+    gap: 8,
+  },
+  inlineMessageSuccess: {
+    backgroundColor: "#DCFCE7",
+  },
+  inlineMessageError: {
+    backgroundColor: "#FEE2E2",
+  },
+  inlineMessageText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#1E40AF",
+  },
+  inlineMessageTextSuccess: {
+    color: "#15803D",
+  },
+  inlineMessageTextError: {
+    color: "#DC2626",
+  },
+  inlineMessageClose: {
+    padding: 4,
   },
 });

@@ -1,19 +1,10 @@
-import React, { lazy, Suspense, useState, useCallback, createContext, useContext } from "react";
+import React, { lazy, Suspense, useCallback } from "react";
 import { View, Text, Pressable, StyleSheet, Platform, ActivityIndicator, Image, ScrollView } from "react-native";
 import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
 import { useAuth } from "../../contexts/AuthContext";
 import { useTheme } from "../../contexts/ThemeContext";
-
-// Contexto para navegação no desktop do estudante
-type StudentDesktopTab = "inicio" | "aulas" | "pagamentos" | "conta";
-interface StudentDesktopNavContextType {
-  activeTab: StudentDesktopTab;
-  setActiveTab: (tab: StudentDesktopTab) => void;
-}
-const StudentDesktopNavContext = createContext<StudentDesktopNavContextType | null>(null);
-export function useStudentDesktopNav() {
-  return useContext(StudentDesktopNavContext);
-}
+import NotificationBell from "../NotificationBell";
+import { useStudentDesktopNav, StudentDesktopNavigationProvider, StudentDesktopTab } from "../../contexts/StudentDesktopNavigationContext";
 
 // Lazy loading das telas
 const StudentHomeScreen = lazy(() => import("../../screens/student/StudentHomeScreen"));
@@ -21,7 +12,7 @@ const StudentClassesScreen = lazy(() => import("../../screens/student/StudentCla
 const StudentPaymentsScreen = lazy(() => import("../../screens/student/StudentPaymentsScreen"));
 const StudentAccountScreen = lazy(() => import("../../screens/student/StudentAccountScreen"));
 
-type StudentTab = "inicio" | "aulas" | "pagamentos" | "conta";
+type StudentTab = StudentDesktopTab;
 
 interface NavItem {
   id: StudentTab;
@@ -73,10 +64,10 @@ function ScreenLoader() {
   );
 }
 
-export default function StudentDesktopLayout() {
+function StudentDesktopLayoutContent() {
   const { signOut, profile, user } = useAuth();
-  const { colors: themeColors, isDark, toggleTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState<StudentTab>("inicio");
+  const { colors: themeColors, isDark } = useTheme();
+  const { activeTab, setActiveTab } = useStudentDesktopNav()!;
 
   const getUserName = useCallback(() => {
     if (profile?.name) {
@@ -111,11 +102,7 @@ export default function StudentDesktopLayout() {
   const currentHour = new Date().getHours();
   const greeting = currentHour < 12 ? "Bom dia" : currentHour < 18 ? "Boa tarde" : "Boa noite";
 
-  // Valor do contexto de navegação
-  const navContextValue = { activeTab, setActiveTab };
-
   return (
-    <StudentDesktopNavContext.Provider value={navContextValue}>
     <View style={[styles.container, { backgroundColor: themeColors.bg }]}>
       {/* Sidebar */}
       <View style={[styles.sidebar, { backgroundColor: themeColors.bgSidebar, borderRightColor: themeColors.border }]}>
@@ -198,25 +185,32 @@ export default function StudentDesktopLayout() {
       <View style={[styles.mainArea, { backgroundColor: themeColors.bg }]}>
         {/* Header */}
         <View style={[styles.header, { backgroundColor: themeColors.bgHeader, borderBottomColor: themeColors.border }]}>
-          <View>
-            <Text style={[styles.headerTitle, { color: themeColors.text }]}>{tabInfo.title}</Text>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Text style={[styles.headerTitle, { color: themeColors.text }]}>{greeting}, {userName} 👋</Text>
+              <View style={[styles.studentBadgeHeader, { backgroundColor: isDark ? "#14532D" : "#DCFCE7" }]}>
+                <Ionicons name="school" size={10} color={isDark ? "#86EFAC" : "#16A34A"} />
+                <Text style={[styles.studentBadgeHeaderText, { color: isDark ? "#86EFAC" : "#16A34A" }]}>ALUNO</Text>
+              </View>
+            </View>
             {tabInfo.subtitle && <Text style={[styles.headerSubtitle, { color: themeColors.textMuted }]}>{tabInfo.subtitle}</Text>}
           </View>
           <View style={styles.headerRight}>
-            {/* Theme Toggle */}
-            <Pressable 
-              style={[styles.headerIconBtn, isDark && { backgroundColor: themeColors.bgHover }]} 
-              onPress={toggleTheme}
-            >
-              <Ionicons 
-                name={isDark ? "sunny" : "moon"} 
-                size={20} 
-                color={isDark ? "#FBBF24" : "#475569"} 
-              />
-            </Pressable>
-            <Pressable style={[styles.headerIconBtn, isDark && { backgroundColor: themeColors.bgHover }]}>
-              <Ionicons name="notifications-outline" size={20} color={isDark ? themeColors.textSecondary : "#475569"} />
-            </Pressable>
+            <NotificationBell 
+              iconColor={isDark ? themeColors.textSecondary : "#475569"} 
+              size={20} 
+              onNavigate={(route) => {
+                // Mapeia rotas para tabs do aluno
+                const routeMap: Record<string, StudentTab> = {
+                  "Pagamento": "pagamentos",
+                  "Turmas": "aulas",
+                  "Conta": "conta",
+                  "Inicio": "inicio",
+                };
+                const tab = routeMap[route] || "inicio";
+                setActiveTab(tab);
+              }} 
+            />
             <View style={[styles.headerUserBtn, isDark && { backgroundColor: themeColors.bgHover }]}>
               {photoURL ? (
                 <Image source={{ uri: photoURL }} style={styles.headerUserAvatarImage} />
@@ -238,7 +232,14 @@ export default function StudentDesktopLayout() {
         </View>
       </View>
     </View>
-    </StudentDesktopNavContext.Provider>
+  );
+}
+
+export default function StudentDesktopLayout() {
+  return (
+    <StudentDesktopNavigationProvider>
+      <StudentDesktopLayoutContent />
+    </StudentDesktopNavigationProvider>
   );
 }
 
@@ -414,13 +415,27 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#1E293B",
+    letterSpacing: -0.3,
   },
   headerSubtitle: {
     fontSize: 13,
     color: "#94A3B8",
-    marginTop: 2,
+    marginTop: 4,
+  },
+  studentBadgeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  studentBadgeHeaderText: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.5,
   },
   headerRight: {
     flexDirection: "row",

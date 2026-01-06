@@ -18,15 +18,15 @@ const webGoogleSignIn = {
     } catch (error: any) {
       // Usuário fechou o popup
       if (error.code === "auth/popup-closed-by-user") {
-        console.log("Sign-in cancelado pelo usuário");
+        // Usuário cancelou - não precisa logar
         return false;
       }
       // Popup bloqueado
       if (error.code === "auth/popup-blocked") {
-        console.log("Popup bloqueado pelo navegador");
         throw new Error("Popup bloqueado. Permita popups para este site.");
       }
-      console.log("Erro no Google Sign-In web:", error);
+      // Outros erros - log apenas em debug
+      console.debug("Erro no Google Sign-In web:", error);
       throw error;
     }
   },

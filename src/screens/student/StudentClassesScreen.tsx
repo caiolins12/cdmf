@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { View, StyleSheet, ScrollView, Text, Pressable, ActivityIndicator, RefreshControl, Modal, Alert } from "react-native";
+import { View, StyleSheet, ScrollView, Text, Pressable, ActivityIndicator, RefreshControl, Modal, Alert, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Linking } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 
 import CdmfHeader from "../../components/CdmfHeader";
 import SectionHeader from "../../components/SectionHeader";
+import StudentHeader from "../../components/StudentHeader";
 import LessonCard from "../../components/LessonCard";
 import { colors } from "../../theme/colors";
 import { useAuth, Class } from "../../contexts/AuthContext";
@@ -17,6 +18,67 @@ const DAYS_OF_WEEK_SHORT = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
 
 // Número de WhatsApp (trocar pelo real)
 const WHATSAPP_NUMBER = "5500000000000";
+
+// Mapeamento de estilos de dança para ícones (mesmo do LessonCard)
+const DANCE_ICONS: Record<string, any> = {
+  // Forró e variações
+  "forró": require("../../../assets/dance_ico1.png"),
+  "forro": require("../../../assets/dance_ico1.png"),
+  "forró universitário": require("../../../assets/dance_ico1.png"),
+  "forró pé de serra": require("../../../assets/dance_ico1.png"),
+  "xote": require("../../../assets/dance_ico1.png"),
+  "baião": require("../../../assets/dance_ico1.png"),
+  
+  // Dança de Salão e variações
+  "dança de salão": require("../../../assets/dance_ico2.png"),
+  "danca de salao": require("../../../assets/dance_ico2.png"),
+  "bolero": require("../../../assets/dance_ico2.png"),
+  "valsa": require("../../../assets/dance_ico2.png"),
+  "tango": require("../../../assets/dance_ico2.png"),
+  "foxtrote": require("../../../assets/dance_ico2.png"),
+  "quickstep": require("../../../assets/dance_ico2.png"),
+  
+  // Samba e variações
+  "samba de gafieira": require("../../../assets/dance_ico3.png"),
+  "samba": require("../../../assets/dance_ico3.png"),
+  "gafieira": require("../../../assets/dance_ico3.png"),
+  "pagode": require("../../../assets/dance_ico3.png"),
+  "samba rock": require("../../../assets/dance_ico3.png"),
+  "samba no pé": require("../../../assets/dance_ico3.png"),
+  
+  // Zouk, Kizomba e variações
+  "zouk": require("../../../assets/dance_ico4.png"),
+  "zouk brasileiro": require("../../../assets/dance_ico4.png"),
+  "kizomba": require("../../../assets/dance_ico4.png"),
+  "bachata": require("../../../assets/dance_ico4.png"),
+  "lambada": require("../../../assets/dance_ico4.png"),
+  "lambazouk": require("../../../assets/dance_ico4.png"),
+  "salsa": require("../../../assets/dance_ico4.png"),
+  "merengue": require("../../../assets/dance_ico4.png"),
+  
+  // Ícone padrão
+  "default": require("../../../assets/dance_ico1.png"),
+};
+
+// Função para obter o ícone baseado no nome da aula
+const getDanceIcon = (lessonName: string) => {
+  const normalizedName = lessonName.toLowerCase().trim();
+  
+  // Procura correspondência exata primeiro
+  if (DANCE_ICONS[normalizedName]) {
+    return DANCE_ICONS[normalizedName];
+  }
+  
+  // Procura correspondência parcial
+  for (const key of Object.keys(DANCE_ICONS)) {
+    if (normalizedName.includes(key) || key.includes(normalizedName)) {
+      return DANCE_ICONS[key];
+    }
+  }
+  
+  // Retorna ícone padrão
+  return DANCE_ICONS["default"];
+};
 
 export default function StudentClassesScreen() {
   const { profile, fetchClasses } = useAuth();
@@ -281,53 +343,60 @@ export default function StudentClassesScreen() {
                       const nextClass = getNextClassInfo(classItem);
                       const isToday = nextClass.daysUntil === 0;
                       const isTomorrow = nextClass.daysUntil === 1;
+                      const danceIcon = getDanceIcon(classItem.name);
                       
                       return (
                         <Pressable 
                           key={classItem.id} 
                           style={[
                             desktopStyles.classCard,
-                            { backgroundColor: themeColors.bgCard, borderColor: themeColors.border },
+                            { backgroundColor: "#FFC107", borderColor: themeColors.border },
                             isToday && [desktopStyles.classCardHighlight, isDark && { backgroundColor: '#14532D', borderColor: '#22C55E' }],
                             isTomorrow && isDark && { backgroundColor: '#1E3A5F', borderColor: '#3B82F6' }
                           ]}
                           onPress={() => openClassOptions(classItem)}
                         >
+                          {/* Ícone da dança */}
                           <View style={[
-                            desktopStyles.classCardIndicator,
-                            { backgroundColor: isDark ? '#64748B' : '#E2E8F0' },
-                            isToday && desktopStyles.classCardIndicatorToday,
-                            isTomorrow && desktopStyles.classCardIndicatorTomorrow
-                          ]} />
+                            desktopStyles.classCardIconContainer,
+                            { backgroundColor: "#3B2E6E" },
+                            isToday && desktopStyles.classCardIconContainerToday,
+                            isTomorrow && desktopStyles.classCardIconContainerTomorrow
+                          ]}>
+                            <Image 
+                              source={danceIcon} 
+                              style={desktopStyles.classCardDanceIcon}
+                              resizeMode="cover"
+                            />
+                          </View>
                           
                           <View style={desktopStyles.classCardContent}>
-                            <Text style={[desktopStyles.className, { color: themeColors.text }]}>{classItem.name}</Text>
-                            <Text style={[desktopStyles.classTeacher, { color: themeColors.textMuted }]}>
+                            <Text style={[desktopStyles.className, { color: colors.text }]}>{classItem.name}</Text>
+                            <Text style={[desktopStyles.classTeacher, { color: colors.text, opacity: 0.75 }]}>
                               Prof. {classItem.teacherName || "A definir"}
                             </Text>
                             
                             <View style={desktopStyles.classScheduleRow}>
                               <View style={[
                                 desktopStyles.classDayBadge,
-                                { backgroundColor: themeColors.bgSecondary },
+                                { backgroundColor: "#3B2E6E" },
                                 isToday && desktopStyles.classDayBadgeToday,
                                 isTomorrow && desktopStyles.classDayBadgeTomorrow
                               ]}>
                                 <Text style={[
                                   desktopStyles.classDayText,
-                                  { color: themeColors.textSecondary },
-                                  (isToday || isTomorrow) && desktopStyles.classDayTextLight
+                                  { color: "#fff" }
                                 ]}>
                                   {nextClass.dayLabel}
                                 </Text>
                               </View>
-                              <Text style={[desktopStyles.classTime, { color: themeColors.text }]}>{nextClass.time}h</Text>
-                              <Text style={[desktopStyles.classDate, { color: themeColors.textMuted }]}>• {nextClass.date}</Text>
+                              <Text style={[desktopStyles.classTime, { color: colors.text }]}>{nextClass.time}h</Text>
+                              <Text style={[desktopStyles.classDate, { color: colors.text, opacity: 0.7 }]}>• {nextClass.date}</Text>
                             </View>
                           </View>
                           
                           <View style={desktopStyles.classCardAction}>
-                            <Ionicons name="chevron-forward" size={20} color={themeColors.textMuted} />
+                            <Ionicons name="chevron-forward" size={20} color="rgba(0,0,0,0.3)" />
                           </View>
                         </Pressable>
                       );
@@ -392,7 +461,7 @@ export default function StudentClassesScreen() {
   // Mobile Layout
   return (
     <View style={styles.screen}>
-      <CdmfHeader />
+      <StudentHeader />
 
       <ScrollView 
         contentContainerStyle={styles.content} 
@@ -594,9 +663,9 @@ const desktopStyles = StyleSheet.create({
   classCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: "#FFC107",
+    borderRadius: 14,
+    padding: 12,
     borderWidth: 1,
     borderColor: "#E2E8F0",
     gap: 12,
@@ -605,30 +674,38 @@ const desktopStyles = StyleSheet.create({
     backgroundColor: "#F0FDF4",
     borderColor: "#86EFAC",
   },
-  classCardIndicator: {
-    width: 4,
-    height: 50,
-    borderRadius: 2,
-    backgroundColor: "#E2E8F0",
+  classCardIconContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 14,
+    backgroundColor: "#3B2E6E",
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
   },
-  classCardIndicatorToday: {
-    backgroundColor: "#22C55E",
+  classCardIconContainerToday: {
+    backgroundColor: "#2E7D32",
   },
-  classCardIndicatorTomorrow: {
-    backgroundColor: "#3B82F6",
+  classCardIconContainerTomorrow: {
+    backgroundColor: "#1565C0",
+  },
+  classCardDanceIcon: {
+    width: "100%",
+    height: "100%",
   },
   classCardContent: {
     flex: 1,
   },
   className: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 17,
+    fontWeight: "900",
     color: "#1E293B",
     marginBottom: 2,
   },
   classTeacher: {
-    fontSize: 13,
-    color: "#64748B",
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1E293B",
     marginBottom: 8,
   },
   classScheduleRow: {
@@ -637,33 +714,34 @@ const desktopStyles = StyleSheet.create({
     gap: 8,
   },
   classDayBadge: {
-    backgroundColor: "#F1F5F9",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    backgroundColor: "#3B2E6E",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   classDayBadgeToday: {
-    backgroundColor: "#22C55E",
+    backgroundColor: "#2E7D32",
   },
   classDayBadgeTomorrow: {
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#1565C0",
   },
   classDayText: {
     fontSize: 11,
-    fontWeight: "700",
-    color: "#64748B",
+    fontWeight: "800",
+    color: "#fff",
   },
   classDayTextLight: {
     color: "#fff",
   },
   classTime: {
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "800",
     color: "#1E293B",
   },
   classDate: {
     fontSize: 13,
-    color: "#94A3B8",
+    fontWeight: "600",
+    color: "#1E293B",
   },
   classCardAction: {
     padding: 8,

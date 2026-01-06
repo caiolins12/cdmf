@@ -6,12 +6,14 @@ import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 
 import CdmfHeader from "../../components/CdmfHeader";
+import StudentHeader from "../../components/StudentHeader";
 import OnboardingSurveyModal from "../../components/OnboardingSurveyModal";
 import { colors } from "../../theme/colors";
 import { useAuth } from "../../contexts/AuthContext";
 import { useGoogleSignIn, GoogleUser } from "../../services/googleSignIn";
 import { useDesktop } from "../../contexts/DesktopContext";
 import { useTheme } from "../../contexts/ThemeContext";
+import { useActivity } from "../../contexts/ActivityContext";
 
 // Opções de gênero
 const GENDER_OPTIONS = [
@@ -33,6 +35,7 @@ export default function StudentAccountScreen() {
   const { signOut: googleSignOut, switchAccount, getCurrentUser } = useGoogleSignIn();
   const { isDesktopMode } = useDesktop();
   const { colors: themeColors, isDark } = useTheme();
+  const { logActivity } = useActivity();
   
   const [googleUser, setGoogleUser] = useState<GoogleUser | null>(null);
   const [loading, setLoading] = useState(false);
@@ -174,6 +177,27 @@ export default function StudentAccountScreen() {
       await refreshProfile?.();
       setShowEditModal(false);
       showMessage("Salvo!", "Dados atualizados com sucesso.");
+      
+      // Registra atividade de atualização de perfil
+      const fieldLabels: Record<string, string> = {
+        phone: "telefone",
+        birthDate: "data de nascimento",
+        gender: "gênero",
+        dancePreference: "preferência de dança",
+      };
+      try {
+        await logActivity({
+          type: "student_profile_updated",
+          title: "Aluno atualizou perfil",
+          description: `${profile.name} atualizou ${fieldLabels[editField] || editField}`,
+          metadata: {
+            studentId: profile.uid,
+            studentName: profile.name,
+          },
+        });
+      } catch (e) {
+        // Silencioso - não bloqueia a atualização do perfil
+      }
     } catch (error) {
       showMessage("Erro", "Não foi possível salvar. Tente novamente.");
     }
@@ -518,7 +542,7 @@ export default function StudentAccountScreen() {
   // Mobile Layout
   return (
     <View style={styles.screen}>
-      <CdmfHeader />
+      <StudentHeader />
 
       {/* Modal de Loading */}
       <Modal visible={loading} transparent animationType="fade">
@@ -706,6 +730,8 @@ export default function StudentAccountScreen() {
                     Digite seu telefone com DDD (ex: (11) 99999-9999)
                   </Text>
                   <TextInput
+                    id="edit-phone"
+                    name="edit-phone"
                     style={{
                       borderWidth: 1,
                       borderColor: "#ddd",
@@ -728,6 +754,7 @@ export default function StudentAccountScreen() {
                     }}
                     keyboardType="phone-pad"
                     maxLength={15}
+                    autoComplete="tel"
                   />
                 </>
               )}
@@ -738,6 +765,8 @@ export default function StudentAccountScreen() {
                     Digite sua data de nascimento (DD/MM/AAAA)
                   </Text>
                   <TextInput
+                    id="edit-birthdate"
+                    name="edit-birthdate"
                     style={{
                       borderWidth: 1,
                       borderColor: "#ddd",
@@ -759,6 +788,7 @@ export default function StudentAccountScreen() {
                     }}
                     keyboardType="number-pad"
                     maxLength={10}
+                    autoComplete="bday"
                   />
                 </>
               )}

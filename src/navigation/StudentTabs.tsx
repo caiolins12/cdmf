@@ -38,13 +38,13 @@ const AnimatedTabIcon = memo(function AnimatedTabIcon({
       Animated.sequence([
         Animated.spring(scaleAnim, {
           toValue: 1.2,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== "web",
           speed: 50,
           bounciness: 12,
         }),
         Animated.spring(scaleAnim, {
           toValue: 1,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== "web",
           speed: 50,
           bounciness: 8,
         }),
@@ -94,9 +94,6 @@ const Tab = createMaterialTopTabNavigator<StudentTabParamList>();
 function StudentTabs() {
   const insets = useSafeAreaInsets();
   const { isDesktopMode, width } = useDesktop();
-
-  // Debug log
-  console.log(`[StudentTabs] isDesktopMode: ${isDesktopMode}, width: ${width}`);
 
   // Em desktop web, usa layout com sidebar
   if (isDesktopMode) {

@@ -36,13 +36,13 @@ function AnimatedTabIcon({ children, focused }: { children: React.ReactNode; foc
       Animated.sequence([
         Animated.spring(scaleAnim, {
           toValue: 1.2,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== "web",
           speed: 50,
           bounciness: 12,
         }),
         Animated.spring(scaleAnim, {
           toValue: 1,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== "web",
           speed: 50,
           bounciness: 8,
         }),

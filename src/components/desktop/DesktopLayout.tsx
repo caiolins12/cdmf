@@ -35,10 +35,10 @@ function ScreenLoader() {
 function DesktopLayoutContent({ userRole }: DesktopLayoutProps) {
   const { signOut, profile, user } = useAuth();
   const desktopNav = useDesktopNavigation();
-  const activeTab = desktopNav?.activeTab || "inicio";
+  const activeTab = desktopNav.activeTab;
 
   const handleTabChange = (tab: DesktopTab) => {
-    desktopNav?.setActiveTab(tab);
+    desktopNav.setActiveTab(tab);
   };
 
   const getUserName = () => {
@@ -86,6 +86,9 @@ function DesktopLayoutContent({ userRole }: DesktopLayoutProps) {
           title={tabInfo.title}
           subtitle={tabInfo.subtitle}
           userName={getUserName()}
+          onNavigate={(route) => desktopNav.navigate(route)}
+          showGreeting={true}
+          userRole={userRole}
         />
 
         <View style={styles.content}>

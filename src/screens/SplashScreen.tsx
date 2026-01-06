@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { View, Image, StyleSheet, Animated, Easing, Dimensions, Text } from "react-native";
+import { View, Image, StyleSheet, Animated, Easing, Dimensions, Text, Platform } from "react-native";
 import { colors } from "../theme/colors";
 import { LinearGradient } from "expo-linear-gradient";
 
@@ -24,13 +24,13 @@ export default function SplashScreenComponent({ onFinish }: SplashScreenProps) {
           toValue: 1,
           duration: 600,
           easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== "web",
         }),
         Animated.timing(textTranslateY, {
           toValue: 0,
           duration: 600,
           easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== "web",
         }),
       ]).start();
     }, 500);
@@ -41,7 +41,7 @@ export default function SplashScreenComponent({ onFinish }: SplashScreenProps) {
         toValue: 0,
         duration: 500,
         easing: Easing.in(Easing.ease),
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== "web",
       }).start(() => {
         onFinish();
       });

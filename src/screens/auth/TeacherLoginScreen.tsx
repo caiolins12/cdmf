@@ -27,17 +27,32 @@ export default function TeacherLoginScreen() {
     }
 
     setLoading(true);
+    
+    // Timeout de segurança para evitar loading infinito
+    const timeoutId = setTimeout(() => {
+      setLoading(false);
+      Alert.alert("Timeout", "O login está demorando muito. Verifique sua conexão e tente novamente.");
+    }, 30000); // 30 segundos
+
     try {
       const result = await teacherSignIn(code.trim(), password);
+      clearTimeout(timeoutId);
       
       if (!result.success) {
+        setLoading(false);
         Alert.alert("Erro", result.error || "Não foi possível fazer login");
+      } else {
+        // Se sucesso, aguarda um pouco antes de desabilitar o loading
+        // O AuthContext redireciona automaticamente
+        setTimeout(() => {
+          setLoading(false);
+        }, 2000);
       }
-      // Se sucesso, o AuthContext redireciona automaticamente
     } catch (e: any) {
-      Alert.alert("Erro", "Ocorreu um erro ao fazer login. Tente novamente.");
-    } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
+      console.error("Erro no login:", e);
+      Alert.alert("Erro", e.message || "Ocorreu um erro ao fazer login. Tente novamente.");
     }
   };
 

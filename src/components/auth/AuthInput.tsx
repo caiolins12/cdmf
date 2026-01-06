@@ -12,6 +12,12 @@ const AuthInput = forwardRef<TextInput, Props>(({ label, secureTextEntry, ...pro
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const isPasswordField = secureTextEntry !== undefined;
 
+  // Gera um ID único baseado no label
+  const inputId = React.useMemo(() => {
+    const baseId = label.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    return `auth-input-${baseId}`;
+  }, [label]);
+
   const togglePasswordVisibility = () => {
     setIsPasswordVisible(!isPasswordVisible);
   };
@@ -23,6 +29,8 @@ const AuthInput = forwardRef<TextInput, Props>(({ label, secureTextEntry, ...pro
         <TextInput
           ref={ref}
           {...props}
+          id={inputId}
+          name={inputId}
           secureTextEntry={isPasswordField ? !isPasswordVisible : false}
           style={[styles.input, isPasswordField && styles.inputWithIcon, props.style]}
           placeholderTextColor={colors.grayLabel}

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { doc, getDoc, setDoc, collection, query, where, getDocs, updateDoc, deleteDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, query, where, getDocs, updateDoc, deleteDoc, onSnapshot, arrayUnion } from "firebase/firestore";
 import { auth, db, UnifiedUser } from "../services/firebase";
 
 export type Role = "student" | "teacher" | "master";
@@ -32,6 +32,23 @@ export type AttendanceRecord = {
   createdAt: number;
 };
 
+// Notificação de pagamento para o aluno
+export type PaymentNotification = {
+  id: string;
+  type: "reminder" | "overdue" | "billing" | "payment_confirmed" | "class_added" | "class_removed" | "enrollment_inactive" | "pending_invoice"; // tipos de notificação
+  title: string;
+  message: string;
+  invoiceId?: string;
+  amount?: number;
+  dueDate?: string;
+  classId?: string; // ID da turma (para notificações de turma)
+  className?: string; // Nome da turma (para notificações de turma)
+  createdAt: number;
+  createdBy: string; // UID de quem enviou
+  read?: boolean; // Se o aluno já leu
+  dismissedAt?: number; // Quando o aluno dispensou
+};
+
 export type Profile = {
   uid: string;
   role: Role;
@@ -45,7 +62,7 @@ export type Profile = {
   active?: boolean; // Se o professor está ativo
   photoURL?: string;
   // Campos adicionais para alunos
-  paymentStatus?: "em_dia" | "pendente" | "atrasado";
+  paymentStatus?: "em_dia" | "pendente" | "atrasado" | "sem_cobranca";
   enrollmentStatus?: "ativo" | "inativo"; // Status de matrícula
   classes?: string[]; // IDs das turmas
   // Dados pessoais (onboarding)
@@ -55,6 +72,31 @@ export type Profile = {
   dancePreference?: string; // condutor, conduzido, ambos
   onboardingCompleted?: boolean;
   phoneVerified?: boolean;
+  // Aluno offline (sem acesso à plataforma)
+  isOffline?: boolean; // Aluno cadastrado manualmente, sem conta
+  notes?: string; // Observações sobre o aluno
+  // Controle de conversão offline -> online
+  convertedFromOfflineId?: string; // ID do perfil offline original (se foi convertido)
+  convertedAt?: number; // Data da conversão
+  // Controle de mesclagem pendente
+  possibleOfflineMatches?: string[]; // IDs de alunos offline que podem ser o mesmo
+  hasPendingMerge?: boolean; // Flag indicando mesclagem pendente
+  // Notificações de pagamento pendentes
+  pendingNotifications?: PaymentNotification[];
+  // Status de desativação - para notificar o aluno
+  deactivatedAt?: number; // Data em que foi desativado
+  deactivationNotificationSeen?: boolean; // Se o aluno já viu a notificação
+};
+
+// Dados para criar/editar aluno offline
+export type OfflineStudentData = {
+  name: string;
+  phone?: string;
+  notes?: string;
+  classIds?: string[];
+  birthDate?: string;
+  gender?: string;
+  dancePreference?: string;
 };
 
 // Credenciais do Mestre (em produção, use variáveis de ambiente)
@@ -65,6 +107,7 @@ type AuthContextType = {
   user: UnifiedUser | null;
   profile: Profile | null;
   loading: boolean;
+  profileDeleted: boolean;
   isMaster: boolean;
   isTeacher: boolean;
   isStudent: boolean;
@@ -74,6 +117,13 @@ type AuthContextType = {
   // Funções do Master
   createTeacher: (name: string, phone?: string) => Promise<{ code: string; password: string }>;
   deleteTeacher: (teacherId: string) => Promise<void>;
+  createOfflineStudent: (data: OfflineStudentData) => Promise<string>;
+  updateOfflineStudent: (studentId: string, data: Partial<OfflineStudentData>) => Promise<void>;
+  deleteOfflineStudent: (studentId: string) => Promise<void>;
+  deleteStudent: (studentId: string) => Promise<void>;
+  convertOfflineToOnline: (offlineId: string, onlineUid: string) => Promise<void>;
+  findPossibleOfflineMatches: (name: string, phone?: string) => Promise<Profile[]>;
+  mergeOfflineWithOnline: (offlineId: string, onlineProfile: Profile) => Promise<void>;
   // Funções de listagem
   fetchStudents: () => Promise<Profile[]>;
   fetchTeachers: () => Promise<Profile[]>;
@@ -108,17 +158,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Flag para ignorar onAuthStateChanged durante operações internas
   const isCreatingTeacher = useRef(false);
 
+  // Flag para indicar que o perfil foi deletado (só true se JÁ EXISTIU antes)
+  const [profileDeleted, setProfileDeleted] = useState(false);
+  
+  // Rastreia se o perfil já existiu alguma vez nesta sessão
+  const profileExistedRef = useRef(false);
+
   async function loadProfile(uid: string) {
     const ref = doc(db, "profiles", uid);
     const snap = await getDoc(ref);
-    if (snap.exists()) setProfile(snap.data() as Profile);
-    else setProfile(null);
+    if (snap.exists()) {
+      setProfile(snap.data() as Profile);
+      setProfileDeleted(false);
+      profileExistedRef.current = true; // Marca que o perfil existiu
+    } else {
+      setProfile(null);
+      // Só marca como deletado se o perfil JÁ EXISTIU antes
+      // Usuários novos não têm perfil ainda, não é "deletado"
+      if (profileExistedRef.current) {
+        setProfileDeleted(true);
+      }
+    }
   }
 
   const refreshProfile = useCallback(async () => {
     if (user) {
       await loadProfile(user.uid);
     }
+  }, [user]);
+
+  // Listener em tempo real para detectar exclusão/alteração do perfil
+  useEffect(() => {
+    if (!user) return;
+
+    const profileRef = doc(db, "profiles", user.uid);
+    const unsubProfile = onSnapshot(profileRef, (snap) => {
+      if (snap.exists()) {
+        setProfile(snap.data() as Profile);
+        setProfileDeleted(false);
+        profileExistedRef.current = true; // Marca que o perfil existiu
+      } else {
+        setProfile(null);
+        // Só marca como deletado se o perfil JÁ EXISTIU antes nesta sessão
+        // Isso evita marcar usuários novos como "deletados"
+        if (profileExistedRef.current) {
+          setProfileDeleted(true);
+        }
+      }
+    }, (error) => {
+      console.error("Erro no listener do perfil:", error);
+    });
+
+    return () => unsubProfile();
   }, [user]);
 
   useEffect(() => {
@@ -141,6 +232,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await loadProfile(u.uid);
         } else {
           setProfile(null);
+          setProfileDeleted(false);
         }
       } catch (error) {
         console.log("Erro no auth state change:", error);
@@ -167,20 +259,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const role = defaults?.role ?? "student";
+    const userName = defaults?.name ?? u.displayName ?? "";
+    const userPhone = defaults?.phone ?? u.phoneNumber;
     
     // Monta o perfil base sem campos undefined
     const newProfile: Record<string, any> = {
       uid: u.uid,
       role: role,
-      name: defaults?.name ?? u.displayName ?? "",
+      name: userName,
       email: defaults?.email ?? u.email ?? "",
       createdAt: Date.now(),
       active: true,
     };
 
     // Adiciona campos opcionais apenas se tiverem valor
-    const phone = defaults?.phone ?? u.phoneNumber;
-    if (phone) newProfile.phone = phone;
+    if (userPhone) newProfile.phone = userPhone;
 
     const photoURL = u.photoURL;
     if (photoURL) newProfile.photoURL = photoURL;
@@ -193,9 +286,158 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Novos campos inicializados como não completos
       newProfile.onboardingCompleted = false;
       newProfile.phoneVerified = false;
+
+      // Verifica se existe aluno offline correspondente
+      try {
+        const possibleMatches = await findPossibleOfflineMatchesInternal(userName, userPhone || undefined);
+        if (possibleMatches.length > 0) {
+          // Sinaliza que há possíveis correspondências para mesclagem
+          newProfile.possibleOfflineMatches = possibleMatches.map(m => m.uid);
+          newProfile.hasPendingMerge = true;
+        }
+      } catch (e) {
+        console.log("Erro ao verificar correspondências offline:", e);
+      }
     }
 
     await setDoc(ref, newProfile as Profile);
+  }
+  
+  // Normaliza texto removendo acentos, espaços extras e convertendo para minúsculo
+  function normalizeText(text: string): string {
+    return text
+      .toLowerCase()
+      .trim()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // Remove acentos
+      .replace(/\s+/g, " "); // Remove espaços extras
+  }
+
+  // Calcula idade a partir da data de nascimento (DD/MM/AAAA)
+  function calculateAge(birthDate: string): number | null {
+    try {
+      const parts = birthDate.split("/");
+      if (parts.length !== 3) return null;
+      
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1; // Mês é 0-indexed
+      const year = parseInt(parts[2], 10);
+      
+      const birth = new Date(year, month, day);
+      const today = new Date();
+      
+      let age = today.getFullYear() - birth.getFullYear();
+      const monthDiff = today.getMonth() - birth.getMonth();
+      
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+        age--;
+      }
+      
+      return age >= 0 && age < 150 ? age : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Normaliza telefone mantendo apenas números
+  function normalizePhone(phone: string): string {
+    const digits = phone.replace(/\D/g, "");
+    // Remove código do país (55) se presente
+    if (digits.length === 13 && digits.startsWith("55")) {
+      return digits.substring(2);
+    }
+    return digits;
+  }
+
+  // Calcula score de correspondência entre dois perfis (0-100)
+  function calculateMatchScore(
+    onlineName: string, 
+    onlinePhone: string | undefined,
+    onlineBirthDate: string | undefined,
+    offlineStudent: Profile
+  ): number {
+    let score = 0;
+    
+    const normalizedOnlineName = normalizeText(onlineName);
+    const normalizedOfflineName = normalizeText(offlineStudent.name);
+    const normalizedOnlinePhone = onlinePhone ? normalizePhone(onlinePhone) : "";
+    const normalizedOfflinePhone = offlineStudent.phone ? normalizePhone(offlineStudent.phone) : "";
+
+    // Correspondência exata de telefone = +50 pontos
+    if (normalizedOnlinePhone && normalizedOfflinePhone && 
+        normalizedOnlinePhone.length >= 10 && 
+        normalizedOnlinePhone === normalizedOfflinePhone) {
+      score += 50;
+    }
+
+    // Correspondência de data de nascimento = +30 pontos
+    if (onlineBirthDate && offlineStudent.birthDate && 
+        onlineBirthDate === offlineStudent.birthDate) {
+      score += 30;
+    }
+
+    // Nome completo igual = +40 pontos
+    if (normalizedOnlineName === normalizedOfflineName) {
+      score += 40;
+    } else {
+      // Análise parcial do nome
+      const onlineWords = normalizedOnlineName.split(" ").filter(w => w.length >= 2);
+      const offlineWords = normalizedOfflineName.split(" ").filter(w => w.length >= 2);
+      
+      if (onlineWords.length > 0 && offlineWords.length > 0) {
+        // Primeiro nome igual = +20 pontos
+        if (onlineWords[0] === offlineWords[0]) {
+          score += 20;
+          
+          // Último nome igual = +15 pontos
+          if (onlineWords.length > 1 && offlineWords.length > 1 &&
+              onlineWords[onlineWords.length - 1] === offlineWords[offlineWords.length - 1]) {
+            score += 15;
+          }
+        }
+        
+        // Contagem de palavras em comum
+        const commonWords = onlineWords.filter(w => offlineWords.includes(w));
+        const wordMatchRatio = commonWords.length / Math.max(onlineWords.length, offlineWords.length);
+        score += Math.round(wordMatchRatio * 10);
+      }
+    }
+
+    return Math.min(score, 100);
+  }
+
+  // Versão interna da busca de correspondências (para usar antes do perfil existir)
+  async function findPossibleOfflineMatchesInternal(
+    name: string, 
+    phone?: string,
+    birthDate?: string
+  ): Promise<Profile[]> {
+    try {
+      const profilesRef = collection(db, "profiles");
+      const q = query(
+        profilesRef,
+        where("role", "==", "student"),
+        where("isOffline", "==", true),
+        where("enrollmentStatus", "==", "ativo")
+      );
+      const snap = await getDocs(q);
+      const offlineStudents = snap.docs.map(d => d.data() as Profile);
+
+      // Calcula score para cada aluno offline
+      const scoredMatches = offlineStudents.map(student => ({
+        student,
+        score: calculateMatchScore(name, phone, birthDate, student)
+      }));
+
+      // Retorna apenas correspondências com score >= 40 (mínimo: primeiro nome igual)
+      // Ordena por score decrescente
+      return scoredMatches
+        .filter(m => m.score >= 40)
+        .sort((a, b) => b.score - a.score)
+        .map(m => m.student);
+    } catch (e) {
+      return [];
+    }
   }
 
   // Verifica e migra dados de perfis existentes para novas versões
@@ -434,6 +676,408 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await deleteDoc(doc(db, "profiles", teacherId));
   }
 
+  // Criar aluno offline (sem conta na plataforma)
+  async function createOfflineStudent(data: OfflineStudentData): Promise<string> {
+    if (profile?.role !== "master" && profile?.role !== "teacher") {
+      throw new Error("Apenas administradores podem cadastrar alunos offline");
+    }
+
+    if (!data.name || data.name.trim().length < 2) {
+      throw new Error("Nome do aluno é obrigatório");
+    }
+
+    // Gera um ID único para o aluno offline
+    const offlineId = `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    
+    // Monta o perfil sem campos undefined (Firestore não aceita undefined)
+    const studentProfile: Record<string, any> = {
+      uid: offlineId,
+      role: "student",
+      name: data.name.trim(),
+      email: `${offlineId}@offline.cdmf`, // Email fictício para alunos offline
+      createdAt: Date.now(),
+      createdBy: profile.uid,
+      isOffline: true,
+      paymentStatus: "sem_cobranca",
+      enrollmentStatus: "ativo",
+      classes: data.classIds || [],
+      onboardingCompleted: true, // Não precisa de onboarding
+      phoneVerified: false,
+      active: true,
+    };
+
+    // Adiciona campos opcionais apenas se tiverem valor
+    if (data.phone && data.phone.trim()) {
+      studentProfile.phone = data.phone.trim();
+    }
+    if (data.notes && data.notes.trim()) {
+      studentProfile.notes = data.notes.trim();
+    }
+    if (data.birthDate && data.birthDate.trim()) {
+      studentProfile.birthDate = data.birthDate.trim();
+      // Calcula idade se tiver data de nascimento
+      const age = calculateAge(data.birthDate.trim());
+      if (age !== null) {
+        studentProfile.age = age;
+      }
+    }
+    if (data.gender) {
+      studentProfile.gender = data.gender;
+    }
+    if (data.dancePreference) {
+      studentProfile.dancePreference = data.dancePreference;
+    }
+
+    await setDoc(doc(db, "profiles", offlineId), studentProfile as Profile);
+
+    // Se tiver turmas, adiciona o aluno a elas
+    if (data.classIds && data.classIds.length > 0) {
+      for (const classId of data.classIds) {
+        try {
+          await addStudentToClass(classId, offlineId);
+        } catch (e) {
+          console.error(`Erro ao adicionar aluno à turma ${classId}:`, e);
+        }
+      }
+    }
+
+    return offlineId;
+  }
+
+  // Atualizar aluno offline
+  async function updateOfflineStudent(studentId: string, data: Partial<OfflineStudentData>): Promise<void> {
+    if (profile?.role !== "master" && profile?.role !== "teacher") {
+      throw new Error("Apenas administradores podem editar alunos offline");
+    }
+
+    // Verifica se é um aluno offline
+    const studentRef = doc(db, "profiles", studentId);
+    const studentSnap = await getDoc(studentRef);
+    
+    if (!studentSnap.exists()) {
+      throw new Error("Aluno não encontrado");
+    }
+
+    const studentData = studentSnap.data() as Profile;
+    
+    if (!studentData.isOffline) {
+      throw new Error("Apenas alunos offline podem ser editados por esta função");
+    }
+
+    // Monta o objeto de atualização sem campos undefined
+    const updates: Record<string, any> = {};
+
+    if (data.name !== undefined && data.name.trim().length >= 2) {
+      updates.name = data.name.trim();
+    }
+    if (data.phone !== undefined) {
+      if (data.phone.trim()) {
+        updates.phone = data.phone.trim();
+      } else {
+        // Se vazio, remove o campo (Firestore deleteField seria melhor, mas simplificando)
+        updates.phone = "";
+      }
+    }
+    if (data.notes !== undefined) {
+      updates.notes = data.notes.trim();
+    }
+    if (data.birthDate !== undefined) {
+      if (data.birthDate.trim()) {
+        updates.birthDate = data.birthDate.trim();
+        const age = calculateAge(data.birthDate.trim());
+        if (age !== null) {
+          updates.age = age;
+        }
+      } else {
+        updates.birthDate = "";
+        updates.age = null;
+      }
+    }
+    if (data.gender !== undefined) {
+      updates.gender = data.gender;
+    }
+    if (data.dancePreference !== undefined) {
+      updates.dancePreference = data.dancePreference;
+    }
+    if (data.classIds !== undefined) {
+      // Atualiza as turmas
+      const oldClassIds = studentData.classes || [];
+      const newClassIds = data.classIds;
+      
+      // Remove das turmas antigas que não estão nas novas
+      for (const classId of oldClassIds) {
+        if (!newClassIds.includes(classId)) {
+          try {
+            await removeStudentFromClass(classId, studentId);
+          } catch (e) {
+            console.error(`Erro ao remover de turma ${classId}:`, e);
+          }
+        }
+      }
+      
+      // Adiciona nas turmas novas que não estavam nas antigas
+      for (const classId of newClassIds) {
+        if (!oldClassIds.includes(classId)) {
+          try {
+            await addStudentToClass(classId, studentId);
+          } catch (e) {
+            console.error(`Erro ao adicionar na turma ${classId}:`, e);
+          }
+        }
+      }
+      
+      updates.classes = newClassIds;
+    }
+
+    updates.updatedAt = Date.now();
+
+    await updateDoc(studentRef, updates);
+  }
+
+  // Deletar aluno offline
+  async function deleteOfflineStudent(studentId: string): Promise<void> {
+    if (profile?.role !== "master") {
+      throw new Error("Apenas o administrador pode deletar alunos");
+    }
+
+    // Verifica se é um aluno offline
+    const studentRef = doc(db, "profiles", studentId);
+    const studentSnap = await getDoc(studentRef);
+    
+    if (!studentSnap.exists()) {
+      throw new Error("Aluno não encontrado");
+    }
+
+    const studentData = studentSnap.data() as Profile;
+    
+    if (!studentData.isOffline) {
+      throw new Error("Apenas alunos offline podem ser deletados");
+    }
+
+    // Remove o aluno de todas as turmas
+    if (studentData.classes && studentData.classes.length > 0) {
+      for (const classId of studentData.classes) {
+        try {
+          await removeStudentFromClass(classId, studentId);
+        } catch (e) {
+          console.error(`Erro ao remover aluno da turma ${classId}:`, e);
+        }
+      }
+    }
+
+    // Deleta faturas associadas
+    const invoicesRef = collection(db, "invoices");
+    const invoicesQuery = query(invoicesRef, where("studentId", "==", studentId));
+    const invoicesSnap = await getDocs(invoicesQuery);
+    
+    for (const invoiceDoc of invoicesSnap.docs) {
+      await deleteDoc(doc(db, "invoices", invoiceDoc.id));
+    }
+
+    // Deleta o perfil do aluno
+    await deleteDoc(studentRef);
+  }
+
+  // Deletar qualquer aluno (offline ou inativo online)
+  async function deleteStudent(studentId: string): Promise<void> {
+    if (profile?.role !== "master") {
+      throw new Error("Apenas o administrador pode deletar alunos");
+    }
+
+    const studentRef = doc(db, "profiles", studentId);
+    const studentSnap = await getDoc(studentRef);
+    
+    if (!studentSnap.exists()) {
+      throw new Error("Aluno não encontrado");
+    }
+
+    const studentData = studentSnap.data() as Profile;
+    
+    // Só pode deletar alunos offline OU alunos inativos
+    if (!studentData.isOffline && studentData.enrollmentStatus !== "inativo") {
+      throw new Error("Apenas alunos offline ou inativos podem ser excluídos. Inative o aluno primeiro.");
+    }
+
+    // Remove o aluno de todas as turmas
+    if (studentData.classes && studentData.classes.length > 0) {
+      for (const classId of studentData.classes) {
+        try {
+          await removeStudentFromClass(classId, studentId);
+        } catch (e) {
+          console.error(`Erro ao remover aluno da turma ${classId}:`, e);
+        }
+      }
+    }
+
+    // Deleta faturas associadas
+    const invoicesRef = collection(db, "invoices");
+    const invoicesQuery = query(invoicesRef, where("studentId", "==", studentId));
+    const invoicesSnap = await getDocs(invoicesQuery);
+    
+    for (const invoiceDoc of invoicesSnap.docs) {
+      await deleteDoc(doc(db, "invoices", invoiceDoc.id));
+    }
+
+    // Se não for offline, também deletar conta de autenticação (via Cloud Functions seria ideal)
+    // Por enquanto apenas deletamos o perfil
+
+    // Deleta o perfil do aluno
+    await deleteDoc(studentRef);
+  }
+
+  // Buscar possíveis correspondências de alunos offline pelo nome ou telefone
+  async function findPossibleOfflineMatches(name: string, phone?: string): Promise<Profile[]> {
+    try {
+      const profilesRef = collection(db, "profiles");
+      const q = query(
+        profilesRef,
+        where("role", "==", "student"),
+        where("isOffline", "==", true)
+      );
+      const snap = await getDocs(q);
+      const offlineStudents = snap.docs.map(d => d.data() as Profile);
+
+      // Normaliza o nome para comparação
+      const normalizedName = name.toLowerCase().trim();
+      const normalizedPhone = phone?.replace(/\D/g, "") || "";
+
+      // Filtra por correspondência de nome ou telefone
+      return offlineStudents.filter(student => {
+        const studentName = student.name.toLowerCase().trim();
+        const studentPhone = student.phone?.replace(/\D/g, "") || "";
+
+        // Correspondência exata de telefone
+        if (normalizedPhone && studentPhone && normalizedPhone === studentPhone) {
+          return true;
+        }
+
+        // Correspondência parcial de nome (pelo menos 80% de similaridade)
+        const nameSimilarity = calculateNameSimilarity(normalizedName, studentName);
+        if (nameSimilarity >= 0.8) {
+          return true;
+        }
+
+        // Primeiro nome igual
+        const firstName = normalizedName.split(" ")[0];
+        const studentFirstName = studentName.split(" ")[0];
+        if (firstName.length >= 3 && firstName === studentFirstName) {
+          return true;
+        }
+
+        return false;
+      });
+    } catch (e) {
+      console.error("Erro ao buscar correspondências:", e);
+      return [];
+    }
+  }
+
+  // Calcula similaridade entre dois nomes (0-1)
+  function calculateNameSimilarity(name1: string, name2: string): number {
+    const words1 = name1.split(" ").filter(w => w.length > 2);
+    const words2 = name2.split(" ").filter(w => w.length > 2);
+    
+    if (words1.length === 0 || words2.length === 0) return 0;
+    
+    let matches = 0;
+    for (const word of words1) {
+      if (words2.includes(word)) matches++;
+    }
+    
+    return matches / Math.max(words1.length, words2.length);
+  }
+
+  // Converte aluno offline para online (quando se cadastra no app)
+  async function convertOfflineToOnline(offlineId: string, onlineUid: string): Promise<void> {
+    if (profile?.role !== "master") {
+      throw new Error("Apenas o administrador pode converter perfis");
+    }
+
+    const offlineRef = doc(db, "profiles", offlineId);
+    const offlineSnap = await getDoc(offlineRef);
+    
+    if (!offlineSnap.exists()) {
+      throw new Error("Perfil offline não encontrado");
+    }
+
+    const offlineData = offlineSnap.data() as Profile;
+    
+    if (!offlineData.isOffline) {
+      throw new Error("Este perfil já está online");
+    }
+
+    const onlineRef = doc(db, "profiles", onlineUid);
+    const onlineSnap = await getDoc(onlineRef);
+    
+    if (!onlineSnap.exists()) {
+      throw new Error("Perfil online não encontrado");
+    }
+
+    const onlineData = onlineSnap.data() as Profile;
+
+    // Mescla os dados - prioriza dados do perfil online, mas mantém histórico do offline
+    const mergedProfile: Partial<Profile> = {
+      // Mantém dados do perfil offline que são relevantes
+      classes: [...new Set([...(offlineData.classes || []), ...(onlineData.classes || [])])],
+      paymentStatus: offlineData.paymentStatus || onlineData.paymentStatus,
+      enrollmentStatus: offlineData.enrollmentStatus || onlineData.enrollmentStatus,
+      notes: offlineData.notes ? `[Histórico offline] ${offlineData.notes}` : onlineData.notes,
+      // Marca como convertido
+      isOffline: false,
+      convertedFromOfflineId: offlineId,
+      convertedAt: Date.now(),
+    };
+
+    // Atualiza o perfil online com dados mesclados
+    await updateDoc(onlineRef, mergedProfile);
+
+    // Atualiza faturas do aluno offline para o novo UID
+    const invoicesRef = collection(db, "invoices");
+    const invoicesQuery = query(invoicesRef, where("studentId", "==", offlineId));
+    const invoicesSnap = await getDocs(invoicesQuery);
+    
+    for (const invoiceDoc of invoicesSnap.docs) {
+      await updateDoc(doc(db, "invoices", invoiceDoc.id), {
+        studentId: onlineUid,
+        studentName: onlineData.name,
+        studentEmail: onlineData.email,
+        migratedFromOffline: true,
+      });
+    }
+
+    // Atualiza turmas - substitui o ID offline pelo online
+    if (offlineData.classes && offlineData.classes.length > 0) {
+      for (const classId of offlineData.classes) {
+        try {
+          const classRef = doc(db, "classes", classId);
+          const classSnap = await getDoc(classRef);
+          
+          if (classSnap.exists()) {
+            const classData = classSnap.data();
+            const studentIds = classData.studentIds || [];
+            
+            // Remove o ID offline e adiciona o online
+            const newStudentIds = studentIds
+              .filter((id: string) => id !== offlineId)
+              .concat(onlineUid);
+            
+            await updateDoc(classRef, { studentIds: [...new Set(newStudentIds)] });
+          }
+        } catch (e) {
+          console.error(`Erro ao atualizar turma ${classId}:`, e);
+        }
+      }
+    }
+
+    // Deleta o perfil offline
+    await deleteDoc(offlineRef);
+  }
+
+  // Mescla perfil offline com perfil online existente
+  async function mergeOfflineWithOnline(offlineId: string, onlineProfile: Profile): Promise<void> {
+    await convertOfflineToOnline(offlineId, onlineProfile.uid);
+  }
+
   // Buscar todos os alunos
   async function fetchStudents(): Promise<Profile[]> {
     try {
@@ -592,7 +1236,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!classSnap.exists()) throw new Error("Turma não encontrada");
     
     const classData = classSnap.data() as Class;
-    if (!classData.studentIds.includes(studentId)) {
+    const wasAlreadyInClass = classData.studentIds.includes(studentId);
+    
+    if (!wasAlreadyInClass) {
       await updateDoc(classRef, {
         studentIds: [...classData.studentIds, studentId],
       });
@@ -604,10 +1250,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (studentSnap.exists()) {
       const studentData = studentSnap.data() as Profile;
       const currentClasses = studentData.classes || [];
-      if (!currentClasses.includes(classId)) {
+      const wasAlreadyInProfile = currentClasses.includes(classId);
+      
+      if (!wasAlreadyInProfile) {
         await updateDoc(studentRef, {
           classes: [...currentClasses, classId],
         });
+        
+        // Envia notificação apenas se o aluno não estava na turma antes
+        if (!wasAlreadyInClass && !studentData.isOffline) {
+          const notificationId = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const notification: PaymentNotification = {
+            id: notificationId,
+            type: "class_added",
+            title: "🎉 Nova Turma Matriculada",
+            message: `Você foi matriculado(a) na turma "${classData.name}". Confira os horários e informações na aba de turmas.`,
+            classId,
+            className: classData.name,
+            createdAt: Date.now(),
+            createdBy: profile?.uid || "system",
+            read: false,
+          };
+          
+          const existingNotifications = studentData.pendingNotifications || [];
+          await updateDoc(studentRef, {
+            pendingNotifications: arrayUnion(notification),
+          });
+        }
       }
     }
   }
@@ -620,6 +1289,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!classSnap.exists()) throw new Error("Turma não encontrada");
     
     const classData = classSnap.data() as Class;
+    const wasInClass = classData.studentIds.includes(studentId);
+    
     await updateDoc(classRef, {
       studentIds: classData.studentIds.filter(id => id !== studentId),
     });
@@ -633,6 +1304,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await updateDoc(studentRef, {
         classes: currentClasses.filter(id => id !== classId),
       });
+      
+      // Envia notificação apenas se o aluno estava na turma e não é offline
+      if (wasInClass && !studentData.isOffline) {
+        const notificationId = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const notification: PaymentNotification = {
+          id: notificationId,
+          type: "class_removed",
+          title: "📋 Removido(a) de Turma",
+          message: `Você foi removido(a) da turma "${classData.name}". Entre em contato com a administração para mais informações.`,
+          classId,
+          className: classData.name,
+          createdAt: Date.now(),
+          createdBy: profile?.uid || "system",
+          read: false,
+        };
+        
+        const existingNotifications = studentData.pendingNotifications || [];
+        await updateDoc(studentRef, {
+          pendingNotifications: arrayUnion(notification),
+        });
+      }
     }
   }
 
@@ -680,6 +1372,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function logout() {
+    // Reseta estados antes de deslogar
+    setProfileDeleted(false);
+    setProfile(null);
+    profileExistedRef.current = false;
     await auth.signOut();
   }
 
@@ -693,6 +1389,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user, 
       profile, 
       loading, 
+      profileDeleted,
       isMaster,
       isTeacher,
       isStudent,
@@ -701,6 +1398,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signOut: logout,
       createTeacher,
       deleteTeacher,
+      createOfflineStudent,
+      updateOfflineStudent,
+      deleteOfflineStudent,
+      deleteStudent,
+      convertOfflineToOnline,
+      findPossibleOfflineMatches,
+      mergeOfflineWithOnline,
       fetchStudents,
       fetchTeachers,
       toggleTeacherActive,
@@ -722,7 +1426,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       recordAttendance,
       fetchAttendance,
     }),
-    [user, profile, loading, isMaster, isTeacher, isStudent, refreshProfile]
+    [user, profile, loading, profileDeleted, isMaster, isTeacher, isStudent, refreshProfile]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

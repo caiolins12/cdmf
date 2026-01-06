@@ -69,11 +69,6 @@ export function DesktopProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(() => {
     const isDesktop = dimensions.width >= DESKTOP_BREAKPOINT;
     
-    // Debug log (remover em produção)
-    if (isWeb && typeof console !== "undefined") {
-      console.log(`[DesktopContext] Width: ${dimensions.width}, isDesktop: ${isDesktop}`);
-    }
-    
     return {
       isDesktopMode: isWeb && isDesktop,
       isDesktopWeb: isWeb && isDesktop,

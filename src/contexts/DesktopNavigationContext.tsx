@@ -20,7 +20,16 @@ const ROUTE_TO_TAB: Record<string, DesktopTab> = {
 };
 
 export function useDesktopNavigation() {
-  return useContext(DesktopNavigationContext);
+  const context = useContext(DesktopNavigationContext);
+  if (!context) {
+    // Retorna um contexto padrão se não estiver dentro do provider
+    return {
+      navigate: () => {},
+      activeTab: "inicio" as DesktopTab,
+      setActiveTab: () => {},
+    };
+  }
+  return context;
 }
 
 export function DesktopNavigationProvider({ children }: { children: React.ReactNode }) {
@@ -33,7 +42,9 @@ export function DesktopNavigationProvider({ children }: { children: React.ReactN
     }
   }, []);
 
-  const value = useMemo(() => ({
+  // Usa useMemo com dependências explícitas para evitar problemas de inicialização
+  // setActiveTab é estável e não precisa estar nas dependências
+  const value = useMemo<DesktopNavigationContextType>(() => ({
     navigate,
     activeTab,
     setActiveTab,

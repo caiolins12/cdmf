@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
-import { View, StyleSheet, ScrollView, Text, Dimensions, FlatList, Pressable, Platform, ActivityIndicator } from "react-native";
+import { View, StyleSheet, ScrollView, Text, Dimensions, FlatList, Pressable, Platform, ActivityIndicator, Modal, Animated, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 
 import CdmfHeader from "../../components/CdmfHeader";
 import SectionHeader from "../../components/SectionHeader";
+import StudentHeader from "../../components/StudentHeader";
 import LessonCard from "../../components/LessonCard";
 import OnboardingSurveyModal from "../../components/OnboardingSurveyModal";
 import { colors } from "../../theme/colors";
@@ -12,13 +13,85 @@ import { useAuth, Class } from "../../contexts/AuthContext";
 import { useDesktop } from "../../contexts/DesktopContext";
 import { useTheme } from "../../contexts/ThemeContext";
 import { showMessage } from "../../utils/alert";
-import { useStudentDesktopNav } from "../../components/desktop/StudentDesktopLayout";
+import { useStudentDesktopNav } from "../../contexts/StudentDesktopNavigationContext";
 import { Linking } from "react-native";
+import { formatCurrency } from "../../contexts/PaymentContext";
+
+// Mapeamento de estilos de dança para ícones (mesmo do LessonCard)
+const DANCE_ICONS: Record<string, any> = {
+  // Forró e variações
+  "forró": require("../../../assets/dance_ico1.png"),
+  "forro": require("../../../assets/dance_ico1.png"),
+  "forró universitário": require("../../../assets/dance_ico1.png"),
+  "forró pé de serra": require("../../../assets/dance_ico1.png"),
+  "xote": require("../../../assets/dance_ico1.png"),
+  "baião": require("../../../assets/dance_ico1.png"),
+  
+  // Dança de Salão e variações
+  "dança de salão": require("../../../assets/dance_ico2.png"),
+  "danca de salao": require("../../../assets/dance_ico2.png"),
+  "bolero": require("../../../assets/dance_ico2.png"),
+  "valsa": require("../../../assets/dance_ico2.png"),
+  "tango": require("../../../assets/dance_ico2.png"),
+  "foxtrote": require("../../../assets/dance_ico2.png"),
+  "quickstep": require("../../../assets/dance_ico2.png"),
+  
+  // Samba e variações
+  "samba de gafieira": require("../../../assets/dance_ico3.png"),
+  "samba": require("../../../assets/dance_ico3.png"),
+  "gafieira": require("../../../assets/dance_ico3.png"),
+  "pagode": require("../../../assets/dance_ico3.png"),
+  "samba rock": require("../../../assets/dance_ico3.png"),
+  "samba no pé": require("../../../assets/dance_ico3.png"),
+  
+  // Zouk, Kizomba e variações
+  "zouk": require("../../../assets/dance_ico4.png"),
+  "zouk brasileiro": require("../../../assets/dance_ico4.png"),
+  "kizomba": require("../../../assets/dance_ico4.png"),
+  "bachata": require("../../../assets/dance_ico4.png"),
+  "lambada": require("../../../assets/dance_ico4.png"),
+  "lambazouk": require("../../../assets/dance_ico4.png"),
+  "salsa": require("../../../assets/dance_ico4.png"),
+  "merengue": require("../../../assets/dance_ico4.png"),
+  
+  // Ícone padrão
+  "default": require("../../../assets/dance_ico1.png"),
+};
+
+// Função para obter o ícone baseado no nome da aula
+const getDanceIcon = (lessonName: string) => {
+  const normalizedName = lessonName.toLowerCase().trim();
+  
+  // Procura correspondência exata primeiro
+  if (DANCE_ICONS[normalizedName]) {
+    return DANCE_ICONS[normalizedName];
+  }
+  
+  // Procura correspondência parcial
+  for (const key of Object.keys(DANCE_ICONS)) {
+    if (normalizedName.includes(key) || key.includes(normalizedName)) {
+      return DANCE_ICONS[key];
+    }
+  }
+  
+  // Retorna ícone padrão
+  return DANCE_ICONS["default"];
+};
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_MARGIN = 24;
 const AUTO_SCROLL_INTERVAL = 8000; // 8 segundos
 const isWeb = Platform.OS === "web";
+
+// Função segura para formatar data no formato DD/MM/YYYY
+const formatDateSafe = (dateStr: any): string => {
+  if (!dateStr || typeof dateStr !== 'string') return '--/--/----';
+  try {
+    return dateStr.split("-").reverse().join("/");
+  } catch {
+    return '--/--/----';
+  }
+};
 
 // Avisos do carrossel (constante fora do componente)
 const ANNOUNCEMENTS = [
@@ -119,10 +192,11 @@ const DotIndicator = memo(function DotIndicator({
 });
 
 function StudentHomeScreen() {
-  const { profile, user, fetchClasses, updateProfile, refreshProfile } = useAuth();
+  const { profile, user, fetchClasses, updateProfile, refreshProfile, profileDeleted, logout } = useAuth();
   const { isDesktopMode } = useDesktop();
   const { colors: themeColors, isDark } = useTheme();
   const desktopNav = useStudentDesktopNav();
+  const navigation = useNavigation<any>();
   const [myClasses, setMyClasses] = useState<Class[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -136,6 +210,10 @@ function StudentHomeScreen() {
 
   // Onboarding state
   const [showOnboarding, setShowOnboarding] = useState(false);
+  
+  // Modal states para conta deletada e desativada
+  const [showDeletedModal, setShowDeletedModal] = useState(false);
+  const [showDeactivatedModal, setShowDeactivatedModal] = useState(false);
 
   // Pega o primeiro nome do usuário logado - memoizado
   const studentName = useMemo(() => {
@@ -164,6 +242,43 @@ function StudentHomeScreen() {
       setShowOnboarding(true);
     }
   }, [profile, needsOnboarding]);
+
+  // Verifica se o perfil foi deletado
+  useEffect(() => {
+    if (profileDeleted && user) {
+      setShowDeletedModal(true);
+    }
+  }, [profileDeleted, user]);
+
+  // Verifica se o perfil foi desativado
+  useEffect(() => {
+    if (profile?.enrollmentStatus === "inativo" && profile.deactivatedAt && !profile.deactivationNotificationSeen) {
+      setShowDeactivatedModal(true);
+    }
+  }, [profile?.enrollmentStatus, profile?.deactivatedAt, profile?.deactivationNotificationSeen]);
+
+  // Fecha o modal de conta deletada e faz logout
+  const handleDeletedModalClose = async () => {
+    setShowDeletedModal(false);
+    await logout();
+  };
+
+  // Dispensa a notificação de desativação
+  const handleDismissDeactivation = async () => {
+    if (!profile?.uid) return;
+    try {
+      await updateProfile(profile.uid, { deactivationNotificationSeen: true });
+      setShowDeactivatedModal(false);
+    } catch (e) {
+      console.error("Erro ao dispensar notificação de desativação:", e);
+      setShowDeactivatedModal(false);
+    }
+  };
+
+  // Abre WhatsApp para contato
+  const handleContactWhatsApp = () => {
+    Linking.openURL(whatsappLink);
+  };
 
   // Verifica sempre que a tela ganha foco
   useFocusEffect(
@@ -337,14 +452,100 @@ function StudentHomeScreen() {
 
   return (
     <View style={[styles.screen, isDesktopMode && desktopStyles.screen, isDesktopMode && { backgroundColor: themeColors.bg }]}>
-      {!isDesktopMode && <CdmfHeader title={`Olá, ${studentName}`} />}
+      {!isDesktopMode && <StudentHeader />}
 
       {/* Modal de Onboarding - Obrigatório */}
       <OnboardingSurveyModal
         visible={showOnboarding}
         onComplete={handleOnboardingComplete}
+        onSwitchAccount={async () => {
+          setShowOnboarding(false);
+          try {
+            await logout();
+          } catch (e) {
+            // Erro silencioso
+          }
+        }}
         initialData={onboardingInitialData}
       />
+      
+      {/* Modal de Conta Deletada */}
+      <Modal visible={showDeletedModal} transparent animationType="fade">
+        <View style={accountModalStyles.overlay}>
+          <View style={accountModalStyles.container}>
+            <View style={[accountModalStyles.iconBox, { backgroundColor: "#FEE2E2" }]}>
+              <Ionicons name="trash-outline" size={48} color={colors.danger} />
+            </View>
+            
+            <Text style={accountModalStyles.title}>Conta Removida</Text>
+            <Text style={accountModalStyles.message}>
+              Sua conta foi removida do sistema pela administração.
+            </Text>
+            <Text style={accountModalStyles.submessage}>
+              Se você acredita que isso foi um engano, entre em contato com a administração.
+            </Text>
+            
+            <View style={accountModalStyles.actions}>
+              <Pressable 
+                style={[accountModalStyles.btn, accountModalStyles.btnSecondary]}
+                onPress={handleContactWhatsApp}
+              >
+                <Ionicons name="logo-whatsapp" size={18} color="#25D366" />
+                <Text style={accountModalStyles.btnSecondaryText}>Entrar em Contato</Text>
+              </Pressable>
+              
+              <Pressable 
+                style={[accountModalStyles.btn, accountModalStyles.btnPrimary]}
+                onPress={handleDeletedModalClose}
+              >
+                <Text style={accountModalStyles.btnPrimaryText}>Entendi</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de Matrícula Desativada */}
+      <Modal visible={showDeactivatedModal} transparent animationType="fade">
+        <View style={accountModalStyles.overlay}>
+          <View style={accountModalStyles.container}>
+            <View style={[accountModalStyles.iconBox, { backgroundColor: "#FEF3C7" }]}>
+              <Ionicons name="alert-circle-outline" size={48} color="#D97706" />
+            </View>
+            
+            <Text style={accountModalStyles.title}>Matrícula Desativada</Text>
+            <Text style={accountModalStyles.message}>
+              Sua matrícula foi temporariamente desativada.
+            </Text>
+            <Text style={accountModalStyles.submessage}>
+              Isso pode ter ocorrido por diversos motivos. Entre em contato com a administração para mais informações ou para reativar sua matrícula.
+            </Text>
+            
+            <View style={accountModalStyles.actions}>
+              <Pressable 
+                style={[accountModalStyles.btn, accountModalStyles.btnSecondary]}
+                onPress={() => {
+                  handleDismissDeactivation();
+                }}
+              >
+                <Ionicons name="close-outline" size={18} color="#64748B" />
+                <Text style={accountModalStyles.btnSecondaryText}>Ignorar por agora</Text>
+              </Pressable>
+              
+              <Pressable 
+                style={[accountModalStyles.btn, accountModalStyles.btnPrimary, { backgroundColor: "#25D366" }]}
+                onPress={() => {
+                  handleDismissDeactivation();
+                  handleContactWhatsApp();
+                }}
+              >
+                <Ionicons name="logo-whatsapp" size={18} color="#fff" />
+                <Text style={accountModalStyles.btnPrimaryText}>Entrar em Contato</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <ScrollView 
         contentContainerStyle={[styles.content, isDesktopMode && desktopStyles.content]} 
@@ -442,48 +643,55 @@ function StudentHomeScreen() {
                       const nextClass = getNextClassInfo(classItem);
                       const isToday = nextClass?.daysUntil === 0;
                       const isTomorrow = nextClass?.daysUntil === 1;
+                      const danceIcon = getDanceIcon(classItem.name);
                       return (
                         <View 
                           key={classItem.id} 
                           style={[
                             desktopStyles.classCard,
                             { 
-                              backgroundColor: themeColors.bgSecondary, 
+                              backgroundColor: "#FFC107", 
                               borderWidth: 1,
                               borderColor: themeColors.border,
                             },
                             isToday && [desktopStyles.classCardToday, isDark && { backgroundColor: '#14532D', borderColor: '#22C55E' }],
-                            isTomorrow && [desktopStyles.classDayBadgeTomorrow, isDark && { backgroundColor: '#1E3A5F', borderColor: '#3B82F6' }]
+                            isTomorrow && isDark && { backgroundColor: '#1E3A5F', borderColor: '#3B82F6' }
                           ]}
                         >
+                          {/* Ícone da dança */}
                           <View style={[
-                            desktopStyles.classIndicator,
-                            { backgroundColor: isDark ? '#64748B' : '#CBD5E1' },
-                            isToday && desktopStyles.classIndicatorToday,
-                            isTomorrow && desktopStyles.classIndicatorTomorrow
-                          ]} />
+                            desktopStyles.classIconContainer,
+                            { backgroundColor: "#3B2E6E" },
+                            isToday && desktopStyles.classIconContainerToday,
+                            isTomorrow && desktopStyles.classIconContainerTomorrow
+                          ]}>
+                            <Image 
+                              source={danceIcon} 
+                              style={desktopStyles.classDanceIcon}
+                              resizeMode="cover"
+                            />
+                          </View>
                           <View style={desktopStyles.classInfo}>
-                            <Text style={[desktopStyles.className, { color: themeColors.text }]}>{classItem.name}</Text>
-                            <Text style={[desktopStyles.classTeacher, { color: themeColors.textMuted }]}>
+                            <Text style={[desktopStyles.className, { color: colors.text }]}>{classItem.name}</Text>
+                            <Text style={[desktopStyles.classTeacher, { color: colors.text, opacity: 0.75 }]}>
                               Prof. {classItem.teacherName || "A definir"}
                             </Text>
                           </View>
                           <View style={desktopStyles.classSchedule}>
                             <View style={[
                               desktopStyles.classDayBadge,
-                              { backgroundColor: themeColors.bgSecondary },
+                              { backgroundColor: "#3B2E6E" },
                               isToday && desktopStyles.classDayBadgeToday,
                               isTomorrow && desktopStyles.classDayBadgeTomorrow
                             ]}>
                               <Text style={[
                                 desktopStyles.classDayText,
-                                { color: themeColors.textSecondary },
-                                (isToday || isTomorrow) && desktopStyles.classDayTextHighlight
+                                { color: "#fff" }
                               ]}>
                                 {isToday ? "HOJE" : isTomorrow ? "AMANHÃ" : nextClass?.dayShort}
                               </Text>
                             </View>
-                            <Text style={[desktopStyles.classTime, { color: themeColors.textSecondary }]}>{nextClass?.time}h</Text>
+                            <Text style={[desktopStyles.classTime, { color: colors.text }]}>{nextClass?.time}h</Text>
                           </View>
                         </View>
                       );
@@ -815,9 +1023,9 @@ const desktopStyles = StyleSheet.create({
   classCard: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 14,
-    backgroundColor: "#F8FAFC",
-    borderRadius: 12,
+    padding: 12,
+    backgroundColor: "#FFC107",
+    borderRadius: 14,
     gap: 12,
   },
   classCardFirst: {
@@ -830,51 +1038,59 @@ const desktopStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#86EFAC",
   },
-  classIndicator: {
-    width: 4,
-    height: 40,
-    borderRadius: 2,
-    backgroundColor: "#CBD5E1",
+  classIconContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 14,
+    backgroundColor: "#3B2E6E",
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
   },
-  classIndicatorToday: {
-    backgroundColor: "#22C55E",
+  classIconContainerToday: {
+    backgroundColor: "#2E7D32",
   },
-  classIndicatorTomorrow: {
-    backgroundColor: "#3B82F6",
+  classIconContainerTomorrow: {
+    backgroundColor: "#1565C0",
+  },
+  classDanceIcon: {
+    width: "100%",
+    height: "100%",
   },
   classInfo: {
     flex: 1,
   },
   className: {
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 17,
+    fontWeight: "900",
     color: "#1E293B",
     marginBottom: 2,
   },
   classTeacher: {
-    fontSize: 13,
-    color: "#64748B",
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1E293B",
   },
   classSchedule: {
     alignItems: "flex-end",
     gap: 4,
   },
   classDayBadge: {
-    backgroundColor: "#E2E8F0",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    backgroundColor: "#3B2E6E",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   classDayBadgeToday: {
-    backgroundColor: "#22C55E",
+    backgroundColor: "#2E7D32",
   },
   classDayBadgeTomorrow: {
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#1565C0",
   },
   classDayText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#64748B",
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#fff",
     textTransform: "uppercase",
   },
   classDayTextHighlight: {
@@ -882,7 +1098,7 @@ const desktopStyles = StyleSheet.create({
   },
   classTime: {
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "800",
     color: "#1E293B",
   },
   loadingBox: {
@@ -994,5 +1210,90 @@ const desktopStyles = StyleSheet.create({
     fontWeight: "600",
     color: "#475569",
     textAlign: "center",
+  },
+});
+
+// Account Modal styles (deleted/deactivated)
+const accountModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  container: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 28,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  iconBox: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#1E293B",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  message: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#475569",
+    textAlign: "center",
+    lineHeight: 24,
+    marginBottom: 8,
+  },
+  submessage: {
+    fontSize: 14,
+    color: "#64748B",
+    textAlign: "center",
+    lineHeight: 21,
+    marginBottom: 24,
+  },
+  actions: {
+    width: "100%",
+    gap: 12,
+  },
+  btn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+  },
+  btnPrimary: {
+    backgroundColor: colors.purple,
+  },
+  btnPrimaryText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  btnSecondary: {
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  btnSecondaryText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#475569",
   },
 });

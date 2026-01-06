@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { Pressable, Text, StyleSheet, Animated, View } from "react-native";
+import { Pressable, Text, StyleSheet, Animated, View, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 type Props = { onPress: () => void };
@@ -10,7 +10,7 @@ export default function GoogleButton({ onPress }: Props) {
   const onPressIn = () => {
     Animated.spring(scaleAnim, {
       toValue: 0.97,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== "web",
     }).start();
   };
 
@@ -19,7 +19,7 @@ export default function GoogleButton({ onPress }: Props) {
       toValue: 1,
       friction: 3,
       tension: 100,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== "web",
     }).start();
   };
 

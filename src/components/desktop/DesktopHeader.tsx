@@ -1,18 +1,28 @@
 import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import NotificationBell from "../NotificationBell";
+import { useAuth } from "../../contexts/AuthContext";
+import { colors } from "../../theme/colors";
 
 interface DesktopHeaderProps {
   title: string;
   subtitle?: string;
   userName?: string;
+  onNavigate?: (route: string) => void;
+  showGreeting?: boolean;
+  userRole?: "master" | "teacher" | "student";
 }
 
 export default function DesktopHeader({
   title,
   subtitle,
   userName,
+  onNavigate,
+  showGreeting = false,
+  userRole,
 }: DesktopHeaderProps) {
+  const { profile, user } = useAuth();
   const currentDate = new Date().toLocaleDateString("pt-BR", {
     weekday: "long",
     day: "numeric",
@@ -21,12 +31,45 @@ export default function DesktopHeader({
 
   const formattedDate = currentDate.charAt(0).toUpperCase() + currentDate.slice(1);
 
+  const getUserName = () => {
+    if (profile?.name) {
+      if (profile.name === "Administrador") return "Admin";
+      return profile.name.split(" ")[0];
+    }
+    if (user?.displayName) {
+      return user.displayName.split(" ")[0];
+    }
+    return userName || "Usuário";
+  };
+
+  const currentHour = new Date().getHours();
+  const greeting = currentHour < 12 ? "Bom dia" : currentHour < 18 ? "Boa tarde" : "Boa noite";
+  const displayUserName = getUserName();
+  
+  // Debug: verifica se deve mostrar greeting
+  const shouldShowGreeting = showGreeting && userRole === "master";
+
   return (
     <View style={styles.container}>
-      {/* Left: Title */}
+      {/* Left: Title or Greeting */}
       <View style={styles.titleSection}>
-        <Text style={styles.title}>{title}</Text>
-        {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+        {shouldShowGreeting ? (
+          <View style={styles.greetingSection}>
+            <View style={styles.greetingRow}>
+              <Text style={styles.greeting}>{greeting}, {displayUserName} 👋</Text>
+              <View style={styles.adminBadge}>
+                <Ionicons name="shield-checkmark" size={12} color="#fff" />
+                <Text style={styles.adminBadgeText}>ADMIN</Text>
+              </View>
+            </View>
+            {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+          </View>
+        ) : (
+          <>
+            <Text style={styles.title}>{title}</Text>
+            {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+          </>
+        )}
       </View>
 
       {/* Right: Actions */}
@@ -38,12 +81,7 @@ export default function DesktopHeader({
         </View>
 
         {/* Notifications */}
-        <Pressable style={styles.iconBtn}>
-          <Ionicons name="notifications-outline" size={20} color="#475569" />
-          <View style={styles.notifBadge}>
-            <Text style={styles.notifText}>3</Text>
-          </View>
-        </Pressable>
+        <NotificationBell iconColor="#475569" size={20} onNavigate={onNavigate} />
 
         {/* Settings */}
         <Pressable style={styles.iconBtn}>
@@ -55,7 +93,7 @@ export default function DesktopHeader({
           <View style={styles.userAvatar}>
             <Ionicons name="person" size={14} color="#fff" />
           </View>
-          <Text style={styles.userName}>{userName}</Text>
+          <Text style={styles.userName}>{displayUserName}</Text>
           <Ionicons name="chevron-down" size={14} color="#94A3B8" />
         </Pressable>
       </View>
@@ -86,6 +124,35 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#94A3B8",
     marginTop: 2,
+  },
+  greetingSection: {
+    gap: 4,
+  },
+  greetingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  greeting: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1E293B",
+    letterSpacing: -0.3,
+  },
+  adminBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.purple,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  adminBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#fff",
+    letterSpacing: 0.5,
   },
 
   rightSection: {
@@ -118,22 +185,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
-  },
-  notifBadge: {
-    position: "absolute",
-    top: 4,
-    right: 4,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: "#EF4444",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  notifText: {
-    color: "#fff",
-    fontSize: 9,
-    fontWeight: "700",
   },
 
   userBtn: {

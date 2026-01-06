@@ -5,10 +5,12 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native";
 
 import CdmfHeader from "../../components/CdmfHeader";
 import SectionHeader from "../../components/SectionHeader";
+import MasterHeader from "../../components/MasterHeader";
 import TimeInput from "../../components/TimeInput";
 import { colors } from "../../theme/colors";
 import { useAuth, Class, Profile } from "../../contexts/AuthContext";
 import { useDesktop } from "../../contexts/DesktopContext";
+import { useActivity } from "../../contexts/ActivityContext";
 
 const PAYMENT_STATUS_MAP = {
   em_dia: { label: "Em dia", color: colors.green, icon: "checkmark-circle" },
@@ -21,6 +23,7 @@ const DAYS_OF_WEEK = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 export default function MasterClassesScreen() {
   const { fetchClasses, createClass, updateClass, deleteClass, fetchTeachers, fetchStudents, addStudentToClass, removeStudentFromClass } = useAuth();
   const { isDesktopMode } = useDesktop();
+  const { logActivity } = useActivity();
   
   const [classes, setClasses] = useState<Class[]>([]);
   const [teachers, setTeachers] = useState<Profile[]>([]);
@@ -56,6 +59,24 @@ export default function MasterClassesScreen() {
   const [editDays, setEditDays] = useState<number[]>([]);
   const [editStartTime, setEditStartTime] = useState("08:00");
   const [editEndTime, setEditEndTime] = useState("09:00");
+
+  // Função para adicionar 1 hora a um horário
+  const addOneHour = (timeStr: string): string => {
+    const [hours, minutes] = timeStr.split(":").map(Number);
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    date.setHours(date.getHours() + 1);
+    const newHours = date.getHours().toString().padStart(2, "0");
+    const newMinutes = date.getMinutes().toString().padStart(2, "0");
+    return `${newHours}:${newMinutes}`;
+  };
+
+  // Atualiza hora de término automaticamente quando hora de início muda (apenas no modal de criação)
+  useEffect(() => {
+    if (showCreateModal) {
+      setEndTime(addOneHour(startTime));
+    }
+  }, [startTime, showCreateModal]);
 
   const loadData = useCallback(async () => {
     try {
@@ -133,6 +154,13 @@ export default function MasterClassesScreen() {
       }
       
       await createClass(classData);
+      
+      // Log activity
+      await logActivity({
+        type: "class_created",
+        title: classData.name,
+        description: `Nova turma criada${classData.schedule?.length ? ` - ${DAYS_OF_WEEK[classData.schedule[0].dayOfWeek]} ${classData.schedule[0].startTime}` : ""}`,
+      });
 
       setShowCreateModal(false);
       resetForm();
@@ -176,27 +204,44 @@ export default function MasterClassesScreen() {
     setShowEditModal(true);
   };
 
-  const handleDeleteClass = (classItem: Class) => {
-    Alert.alert(
-      "Excluir Turma",
-      `Deseja excluir a turma "${classItem.name}"?\n\nEsta ação não pode ser desfeita.`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Excluir",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteClass(classItem.id);
-              await loadData();
-              Alert.alert("Sucesso", "Turma excluída com sucesso!");
-            } catch (e: any) {
-              Alert.alert("Erro", e.message || "Não foi possível excluir a turma");
-            }
+  const handleDeleteClass = async (classItem: Class) => {
+    const message = `Deseja excluir a turma "${classItem.name}"?\n\nEsta ação não pode ser desfeita.`;
+    
+    if (Platform.OS === "web") {
+      // Na web, usa window.confirm
+      const confirmed = window.confirm(message);
+      if (!confirmed) return;
+      
+      try {
+        await deleteClass(classItem.id);
+        await loadData();
+        window.alert("Turma excluída com sucesso!");
+      } catch (e: any) {
+        window.alert(e.message || "Não foi possível excluir a turma");
+      }
+    } else {
+      // No mobile, usa Alert.alert
+      Alert.alert(
+        "Excluir Turma",
+        message,
+        [
+          { text: "Cancelar", style: "cancel" },
+          {
+            text: "Excluir",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await deleteClass(classItem.id);
+                await loadData();
+                Alert.alert("Sucesso", "Turma excluída com sucesso!");
+              } catch (e: any) {
+                Alert.alert("Erro", e.message || "Não foi possível excluir a turma");
+              }
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -260,11 +305,38 @@ export default function MasterClassesScreen() {
   const handleToggleStudent = async (studentId: string) => {
     if (!selectedClass) return;
 
+    const student = students.find(s => s.uid === studentId);
+    const studentName = student?.name || "Aluno";
+
     try {
       if (selectedClass.studentIds.includes(studentId)) {
         await removeStudentFromClass(selectedClass.id, studentId);
+        // Registra atividade de remoção
+        await logActivity({
+          type: "student_removed_from_class",
+          title: "Aluno Removido de Turma",
+          description: `${studentName} foi removido(a) da turma "${selectedClass.name}"`,
+          metadata: {
+            studentId,
+            studentName,
+            classId: selectedClass.id,
+            className: selectedClass.name,
+          },
+        });
       } else {
         await addStudentToClass(selectedClass.id, studentId);
+        // Registra atividade de adição
+        await logActivity({
+          type: "student_added_to_class",
+          title: "Aluno Adicionado à Turma",
+          description: `${studentName} foi matriculado(a) na turma "${selectedClass.name}"`,
+          metadata: {
+            studentId,
+            studentName,
+            classId: selectedClass.id,
+            className: selectedClass.name,
+          },
+        });
       }
       await loadData();
       // Atualiza o selectedClass com os novos dados
@@ -305,7 +377,7 @@ export default function MasterClassesScreen() {
 
   return (
     <View style={[styles.screen, isDesktopMode && desktopStyles.screen]}>
-      {!isDesktopMode && <CdmfHeader />}
+      {!isDesktopMode && <MasterHeader />}
       {!isDesktopMode && <SectionHeader title="Gestão de Turmas" />}
 
       {/* Modal para criar turma */}

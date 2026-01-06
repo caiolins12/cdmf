@@ -40,7 +40,7 @@ export default function StudentEntryScreen({ navigation }: any) {
           toValue: 1,
           duration: 1500,
           easing: Easing.linear,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== "web",
         })
       );
       const pulse = Animated.loop(
@@ -48,12 +48,12 @@ export default function StudentEntryScreen({ navigation }: any) {
           Animated.timing(pulseAnim, {
             toValue: 1.1,
             duration: 800,
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== "web",
           }),
           Animated.timing(pulseAnim, {
             toValue: 1,
             duration: 800,
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== "web",
           }),
         ])
       );
@@ -83,13 +83,48 @@ export default function StudentEntryScreen({ navigation }: any) {
     await performGoogleSignIn();
   };
 
+  // Ref para controlar cancelamento
+  const signInAborted = useRef(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const cancelSignIn = () => {
+    signInAborted.current = true;
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    setShowLoadingOverlay(false);
+    setLoadingMessage("");
+    setGoogleLoading(false);
+  };
+
   const performGoogleSignIn = async () => {
+    signInAborted.current = false;
     setGoogleLoading(true);
     setLoadingMessage("Conectando com Google...");
     setShowLoadingOverlay(true);
     
+    // Timeout de 30 segundos
+    timeoutRef.current = setTimeout(() => {
+      if (!signInAborted.current) {
+        signInAborted.current = true;
+        setShowLoadingOverlay(false);
+        setLoadingMessage("");
+        setGoogleLoading(false);
+        showMessage("Tempo esgotado", "O login demorou muito. Tente novamente.");
+      }
+    }, 30000);
+    
     try {
       const success = await signIn();
+      
+      // Limpa o timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      
+      if (signInAborted.current) return;
       
       if (!success) {
         setShowLoadingOverlay(false);
@@ -98,8 +133,12 @@ export default function StudentEntryScreen({ navigation }: any) {
         return;
       }
       
+      if (signInAborted.current) return;
+      
       setLoadingMessage("Verificando credenciais...");
       await new Promise(resolve => setTimeout(resolve, 500));
+      
+      if (signInAborted.current) return;
       
       setShowLoadingOverlay(false);
       setLoadingMessage("");
@@ -110,6 +149,14 @@ export default function StudentEntryScreen({ navigation }: any) {
         setShowSuccessModal(false);
       }, 1500);
     } catch (e: any) {
+      // Limpa o timeout em caso de erro
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      
+      if (signInAborted.current) return;
+      
       setShowLoadingOverlay(false);
       setLoadingMessage("");
       // Só mostra erro se não foi cancelamento pelo usuário
@@ -117,7 +164,9 @@ export default function StudentEntryScreen({ navigation }: any) {
         showMessage("Não foi possível entrar", `Erro no Google Sign-In: ${e?.message ?? "Tente novamente."}`);
       }
     } finally {
-      setGoogleLoading(false);
+      if (!signInAborted.current) {
+        setGoogleLoading(false);
+      }
     }
   };
 
@@ -128,12 +177,33 @@ export default function StudentEntryScreen({ navigation }: any) {
 
   const handleSwitchGoogleAccount = async () => {
     setShowGoogleOptions(false);
+    signInAborted.current = false;
     setGoogleLoading(true);
     setLoadingMessage("Trocando conta...");
     setShowLoadingOverlay(true);
     
+    // Timeout de 30 segundos
+    timeoutRef.current = setTimeout(() => {
+      if (!signInAborted.current) {
+        signInAborted.current = true;
+        setShowLoadingOverlay(false);
+        setLoadingMessage("");
+        setGoogleLoading(false);
+        showMessage("Tempo esgotado", "A troca de conta demorou muito. Tente novamente.");
+      }
+    }, 30000);
+    
     try {
       const success = await switchAccount();
+      
+      // Limpa o timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      
+      if (signInAborted.current) return;
+      
       if (!success) {
         setShowLoadingOverlay(false);
         setLoadingMessage("");
@@ -141,8 +211,12 @@ export default function StudentEntryScreen({ navigation }: any) {
         return;
       }
       
+      if (signInAborted.current) return;
+      
       setLoadingMessage("Verificando credenciais...");
       await new Promise(resolve => setTimeout(resolve, 500));
+      
+      if (signInAborted.current) return;
       
       await checkPreviousGoogleUser();
       setShowLoadingOverlay(false);
@@ -154,13 +228,23 @@ export default function StudentEntryScreen({ navigation }: any) {
         setShowSuccessModal(false);
       }, 1500);
     } catch (e: any) {
+      // Limpa o timeout em caso de erro
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      
+      if (signInAborted.current) return;
+      
       setShowLoadingOverlay(false);
       setLoadingMessage("");
       if (e?.code !== "SIGN_IN_CANCELLED" && e?.code !== "auth/popup-closed-by-user") {
         showMessage("Erro", "Não foi possível trocar de conta.");
       }
     } finally {
-      setGoogleLoading(false);
+      if (!signInAborted.current) {
+        setGoogleLoading(false);
+      }
     }
   };
 
@@ -183,6 +267,10 @@ export default function StudentEntryScreen({ navigation }: any) {
             <View style={styles.loadingDotsContainer}>
               <ActivityIndicator size="small" color={colors.purple} />
             </View>
+            {/* Botão de cancelar */}
+            <Text style={styles.cancelLoadingText} onPress={cancelSignIn}>
+              Cancelar
+            </Text>
           </View>
         </View>
       </Modal>
@@ -326,6 +414,14 @@ const styles = StyleSheet.create({
   },
   loadingDotsContainer: {
     marginTop: 12,
+  },
+  cancelLoadingText: {
+    marginTop: 20,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#DC2626",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
   },
   successModal: {
     backgroundColor: colors.bg,

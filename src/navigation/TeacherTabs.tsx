@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { createMaterialTopTabNavigator } from "@react-navigation/material-top-tabs";
 import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
-import { Animated } from "react-native";
+import { Animated, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "../theme/colors";
 
@@ -20,13 +20,13 @@ function AnimatedTabIcon({ children, focused }: { children: React.ReactNode; foc
       Animated.sequence([
         Animated.spring(scaleAnim, {
           toValue: 1.2,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== "web",
           speed: 50,
           bounciness: 12,
         }),
         Animated.spring(scaleAnim, {
           toValue: 1,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== "web",
           speed: 50,
           bounciness: 8,
         }),
