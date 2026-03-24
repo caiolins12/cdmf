@@ -1,0 +1,168 @@
+import React, { useState, useRef } from "react";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Modal, TextInput } from "react-native";
+import AuthLayout from "../../components/auth/AuthLayout";
+import { showAlert } from "../../utils/alert";
+import AuthInput from "../../components/auth/AuthInput";
+import { PrimaryButton } from "../../components/auth/AuthButtons";
+import { useAuth } from "../../contexts/AuthContext";
+import { colors } from "../../theme/colors";
+import { ui } from "../../theme/ui";
+import { Ionicons } from "@/shims/icons";
+
+export default function TeacherLoginScreen() {
+  const { teacherSignIn } = useAuth();
+  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  
+  const passwordRef = useRef<TextInput>(null);
+
+  const handleLogin = async () => {
+    if (!code.trim()) {
+      showAlert("Atenção", "Digite o código do professor");
+      return;
+    }
+    if (!password) {
+      showAlert("Atenção", "Digite a senha");
+      return;
+    }
+
+    setLoading(true);
+    
+    // Timeout de segurança para evitar loading infinito
+    const timeoutId = setTimeout(() => {
+      setLoading(false);
+      showAlert("Timeout", "O login está demorando muito. Verifique sua conexão e tente novamente.");
+    }, 30000); // 30 segundos
+
+    try {
+      const result = await teacherSignIn(code.trim(), password);
+      clearTimeout(timeoutId);
+      
+      if (!result.success) {
+        setLoading(false);
+        showAlert("Erro", result.error || "Não foi possível fazer login");
+      } else {
+        // Se sucesso, aguarda um pouco antes de desabilitar o loading
+        // O AuthContext redireciona automaticamente
+        setTimeout(() => {
+          setLoading(false);
+        }, 2000);
+      }
+    } catch (e: any) {
+      clearTimeout(timeoutId);
+      setLoading(false);
+      console.error("Erro no login:", e);
+      showAlert("Erro", e.message || "Ocorreu um erro ao fazer login. Tente novamente.");
+    }
+  };
+
+  const handleForgotPassword = () => {
+    showAlert("Recuperar Senha", "Entre em contato com o administrador do sistema para recuperar sua senha.");
+  };
+
+  return (
+    <AuthLayout
+      noScroll
+      logoContainerStyle={{ width: "82%", maxWidth: ui.layout.contentMaxWidth, alignItems: "center" }}
+      logoStyle={{ width: 360, height: 220 }}
+      logoOffsetY={48}
+      logoGap={-18}
+    >
+      {/* Modal de Loading */}
+      <Modal visible={loading} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.loadingModal}>
+            <ActivityIndicator size="large" color={colors.purple} />
+            <Text style={styles.loadingText}>Verificando credenciais...</Text>
+          </View>
+        </View>
+      </Modal>
+
+      <View style={styles.container} importantForAccessibility="yes">
+        <AuthInput 
+          label="Código do Professor" 
+          value={code} 
+          onChangeText={setCode} 
+          autoCapitalize="characters"
+          autoComplete="username"
+          textContentType="username"
+          returnKeyType="next"
+          blurOnSubmit={false}
+          onSubmitEditing={() => passwordRef.current?.focus()}
+          editable={!loading}
+        />
+        <AuthInput 
+          ref={passwordRef}
+          label="Senha" 
+          value={password} 
+          onChangeText={setPassword} 
+          secureTextEntry
+          autoComplete="password"
+          textContentType="password"
+          returnKeyType="done"
+          onSubmitEditing={handleLogin}
+          editable={!loading}
+        />
+
+        <Pressable onPress={handleForgotPassword} style={styles.forgotWrap} disabled={loading}>
+          <Text style={styles.forgotText}>Esqueceu sua senha?</Text>
+        </Pressable>
+
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.purple} />
+          </View>
+        ) : (
+          <PrimaryButton title="ENTRAR" onPress={handleLogin} />
+        )}
+      </View>
+    </AuthLayout>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { 
+    width: "100%", 
+    alignItems: "center", 
+    flex: 1, 
+    justifyContent: "flex-start", 
+    marginTop: 30, 
+    paddingBottom: 18 
+  },
+  forgotWrap: { 
+    width: "82%", 
+    maxWidth: ui.layout.contentMaxWidth, 
+    alignItems: "center", 
+    marginTop: 10, 
+    marginBottom: 8 
+  },
+  forgotText: { color: colors.purple, fontWeight: "700" },
+  loadingContainer: { 
+    height: 50, 
+    justifyContent: "center", 
+    alignItems: "center" 
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingModal: {
+    backgroundColor: colors.bg,
+    borderRadius: 16,
+    padding: 32,
+    alignItems: "center",
+    minWidth: 200,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: colors.text,
+    fontWeight: "600",
+  },
+});
+
+
