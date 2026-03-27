@@ -23,18 +23,6 @@ export default defineConfig({
     alias: [
       { find: /^react-native$/, replacement: "react-native-web" },
       { find: "@", replacement: path.resolve(__dirname, "src") },
-      {
-        find: "firebase/app",
-        replacement: path.resolve(__dirname, "src/services/appCompat.ts"),
-      },
-      {
-        find: "firebase/functions",
-        replacement: path.resolve(__dirname, "src/services/functionsCompat.ts"),
-      },
-      {
-        find: "firebase/firestore",
-        replacement: path.resolve(__dirname, "src/services/postgresFirestoreCompat.ts"),
-      },
     ],
   },
   server: {

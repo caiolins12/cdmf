@@ -1,5 +1,5 @@
-import { getApp, getApps } from "firebase/app";
-import { getFunctions, httpsCallable, type Functions } from "firebase/functions";
+import { getApp, getApps } from "./appCompat";
+import { getFunctions, httpsCallable, type Functions } from "./functionsCompat";
 
 type JsonPrimitive = string | number | boolean | null;
 type JsonValue = JsonPrimitive | JsonObject | JsonValue[];

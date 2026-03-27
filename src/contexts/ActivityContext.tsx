@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useCallback, useState, useEffect, useMemo } from "react";
-import { doc, setDoc, collection, query, where, getDocs, orderBy, limit, onSnapshot, Timestamp, deleteDoc } from "firebase/firestore";
+import { doc, setDoc, collection, query, where, getDocs, orderBy, limit, onSnapshot, Timestamp, deleteDoc } from "../services/postgresFirestoreCompat";
 import { db } from "../services/firebase";
 import { useAuth } from "./AuthContext";
 

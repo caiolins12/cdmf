@@ -21,6 +21,7 @@ import {
   getBroadcastImages,
   getBroadcastStats,
   getConversations,
+  getInstanceContactPhone,
   getInstanceStatus,
   getMessages,
   getQrCode,
@@ -36,7 +37,7 @@ import {
   deleteBroadcastImage,
   verifyPhoneOtp,
 } from "./whatsapp";
-import { checkRateLimit } from "./rate-limit";
+import { checkRateLimit, checkAuthRateLimit, recordAuthSuccess, recordAuthFailure } from "./rate-limit";
 import { setBotPhase, getChatbotStatus } from "./chatbot";
 
 type RpcHandler = (req: ApiRequest, payload: any) => Promise<unknown>;
@@ -53,7 +54,20 @@ const handlers: Record<string, RpcHandler> = {
   async dbGetDocs(req, payload) {
     await requireSessionUser(req);
     const collection = assertCollectionName(payload?.collection);
+    const MAX_DOCS = 500;
     const constraints = normalizeConstraints(payload?.constraints);
+    // Enforce a server-side ceiling: if the client sent no limit or a larger
+    // one, cap it at MAX_DOCS to prevent full-collection dumps.
+    const hasLimit = constraints.some((c) => c.type === "limit");
+    if (!hasLimit) {
+      constraints.push({ type: "limit", value: MAX_DOCS });
+    } else {
+      const idx = constraints.findIndex((c) => c.type === "limit");
+      const existing = constraints[idx] as { type: "limit"; value: number };
+      if (existing.value > MAX_DOCS) {
+        constraints[idx] = { type: "limit", value: MAX_DOCS };
+      }
+    }
     const docs = await listDocuments(collection, constraints);
     return {
       docs: docs.map((item) => ({ id: item.id, data: item.data })),
@@ -87,11 +101,18 @@ const handlers: Record<string, RpcHandler> = {
   },
 
   async masterSignIn(req, payload) {
-    checkRateLimit(`masterSignIn_${getRequestIp(req)}`);
+    const ip = getRequestIp(req);
+    checkAuthRateLimit(ip);
     const code = typeof payload?.code === "string" ? payload.code : "";
     const password = typeof payload?.password === "string" ? payload.password : "";
-    const result = await ensureMasterAccount(code, password);
-    return { success: true, email: result.email };
+    try {
+      const result = await ensureMasterAccount(code, password);
+      recordAuthSuccess(ip);
+      return { success: true, email: result.email };
+    } catch (err) {
+      recordAuthFailure(ip);
+      throw err;
+    }
   },
 
   async resolveTeacherSignIn(_req, payload) {
@@ -218,6 +239,11 @@ const handlers: Record<string, RpcHandler> = {
     return { success: true, ...status };
   },
 
+  async getWhatsAppContact(req) {
+    await requireSessionUser(req);
+    return { success: true, phone: await getInstanceContactPhone() };
+  },
+
   async getWhatsAppQrCode(req) {
     await requireRole(req, ["master"]);
     const result = await getQrCode();
@@ -284,5 +310,4 @@ export async function runRpc(name: string, req: ApiRequest, payload: JsonObject)
   }
   return handler(req, payload);
 }
-
 

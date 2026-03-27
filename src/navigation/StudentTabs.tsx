@@ -29,7 +29,7 @@ const isWeb = Platform.OS === "web";
 // Mapa de ícones
 const ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
   Inicio: "home-outline",
-  Aulas: "calendar-outline",
+  Turmas: "calendar-outline",
   Pagamento: "cash-outline",
   Conta: "settings-outline",
 };
@@ -72,7 +72,7 @@ const AnimatedTabIcon = memo(function AnimatedTabIcon({
 
 export type StudentTabParamList = {
   Inicio: undefined;
-  Aulas: undefined;
+  Turmas: undefined;
   Pagamento: undefined;
   Conta: undefined;
 };
@@ -222,7 +222,7 @@ function StudentTabs() {
         sceneContainerStyle={styles.sceneContainer}
       >
         <Tab.Screen name="Inicio" component={StudentHomeScreen} options={{ title: "Início" }} />
-        <Tab.Screen name="Aulas" component={StudentClassesScreen} />
+        <Tab.Screen name="Turmas" component={StudentClassesScreen} />
         <Tab.Screen name="Pagamento" component={StudentPaymentsScreen} options={{ title: "Pagar" }} />
         <Tab.Screen name="Conta" component={StudentAccountScreen} />
       </Tab.Navigator>

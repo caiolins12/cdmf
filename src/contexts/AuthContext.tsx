@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { doc, getDoc, setDoc, collection, query, where, getDocs, updateDoc, deleteDoc, onSnapshot, arrayUnion } from "firebase/firestore";
-import { auth, db, UnifiedUser, functions } from "../services/firebase";
-import { httpsCallable } from "firebase/functions";
+import { doc, getDoc, setDoc, collection, query, where, getDocs, updateDoc, deleteDoc, onSnapshot, arrayUnion } from "../services/postgresFirestoreCompat";
+import { auth, db, UnifiedUser } from "../services/firebase";
+import { apiPost, ClientApiError } from "../services/apiClient";
 import { formatCurrency, BaileVoucher, Invoice, PaymentStatus, InvoiceType, PaymentMethod } from "./PaymentContext";
 
 export type Role = "student" | "teacher" | "master";
@@ -643,76 +643,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Login de professor/mestre
   async function teacherSignIn(code: string, password: string): Promise<{ success: boolean; error?: string }> {
-    // Tenta autenticação master via Cloud Function (seguro)
+    const trimmedCode = code.trim().toUpperCase();
+
+    // 1. Tenta login como administrador master
     try {
-      const masterSignInFunction = httpsCallable(functions, "masterSignIn");
-      const result = await masterSignInFunction({ code, password });
-      const data = result.data as { success: boolean; email?: string; error?: string };
-      
-      if (data.success && data.email) {
-        // Se a Cloud Function validou, faz login com email/senha via Firebase Auth
-        // A senha será validada pelo Firebase Auth (configurada na Cloud Function)
-        const masterEmail = data.email;
-        try {
-          await auth.signInWithEmailAndPassword(masterEmail, password);
-          return { success: true };
-        } catch (authError: any) {
-          // Se a conta não existe, tenta criar (primeira vez)
-          if (authError.code === "auth/user-not-found") {
-            return { success: false, error: "Conta master não encontrada. A conta será criada automaticamente na próxima tentativa." };
-          }
-          
-          if (authError.code === "auth/wrong-password" || authError.code === "auth/invalid-credential") {
-            return { success: false, error: "Senha incorreta. Verifique se está usando a senha configurada para o administrador." };
-          }
-          
-          return { success: false, error: `Erro ao fazer login: ${authError.message}. Código: ${authError.code}` };
-        }
-      } else {
-        // Credenciais inválidas (já validadas pela Cloud Function)
-        return { success: false, error: data.error || "Código ou senha incorretos. Verifique se MASTER_CODE e MASTER_PASSWORD estão configurados corretamente." };
+      const data = await apiPost<{ success: boolean; email: string }>(
+        "/api/rpc/masterSignIn",
+        { code: trimmedCode, password }
+      );
+      if (data.email) {
+        await auth.signInWithEmailAndPassword(data.email, password);
+        return { success: true };
       }
     } catch (masterError: any) {
-      // Verifica se é um erro específico de função não encontrada
-      if (masterError.code === "functions/not-found" || masterError.message?.includes("not found")) {
-        return { success: false, error: "Endpoint de autenticação não encontrado. Verifique o deploy da API." };
+      const code = masterError instanceof ClientApiError ? masterError.code : undefined;
+      // Credenciais de master incorretas — tenta como professor
+      if (code === "permission-denied") {
+        // cai no bloco de professor abaixo
+      } else if (masterError.code === "auth/wrong-password" || masterError.code === "auth/invalid-credential") {
+        return { success: false, error: "Senha incorreta." };
+      } else if (code && code !== "not-found") {
+        // Erro real (configuração, rede, etc.)
+        return { success: false, error: masterError.message || "Erro ao autenticar." };
       }
-      
-      // Se for erro de credenciais inválidas, retorna erro
-      if (masterError.code === "functions/permission-denied" || masterError.code === "functions/invalid-argument") {
-        return { success: false, error: masterError.message || "Código ou senha incorretos" };
-      }
-      
-      // Se for erro de configuração (secrets não configurados)
-      if (masterError.code === "functions/failed-precondition") {
-        return { success: false, error: `Configuração incompleta: ${masterError.message}. Configure as variáveis MASTER_CODE e MASTER_PASSWORD.` };
-      }
-      
-      // Continua para login de professor normal abaixo
+      // "not-found" ou erros desconhecidos → tenta professor
     }
 
-    // Login de professor normal - busca pelo código
+    // 2. Tenta login como professor
     try {
-      const resolveTeacherSignInFunction = httpsCallable(functions, "resolveTeacherSignIn");
-      const teacherResult = await resolveTeacherSignInFunction({ code });
-      const teacherData = teacherResult.data as { success: boolean; email?: string };
-
-      if (!teacherData.success || !teacherData.email) {
-        return { success: false, error: "Código de professor não encontrado ou inativo" };
+      const teacherData = await apiPost<{ success: boolean; email: string }>(
+        "/api/rpc/resolveTeacherSignIn",
+        { code: trimmedCode }
+      );
+      if (!teacherData.email) {
+        return { success: false, error: "Código de professor não encontrado ou inativo." };
       }
-      
-      // Faz login com o email do professor
       await auth.signInWithEmailAndPassword(teacherData.email, password);
       return { success: true };
     } catch (e: any) {
-      if (e.code === "functions/not-found") {
-        return { success: false, error: "Endpoint de login de professor não encontrado. Verifique o deploy da API." };
-      }
-      if (e.code === "functions/permission-denied") {
-        return { success: false, error: e.message || "Código de professor não encontrado ou inativo" };
+      if (e instanceof ClientApiError) {
+        if (e.code === "not-found" || e.code === "permission-denied") {
+          return { success: false, error: "Código de professor não encontrado ou inativo." };
+        }
       }
       if (e.code === "auth/wrong-password" || e.code === "auth/invalid-credential") {
-        return { success: false, error: "Senha incorreta" };
+        return { success: false, error: "Senha incorreta." };
       }
       return { success: false, error: "Erro ao fazer login. Verifique suas credenciais." };
     }
@@ -1355,8 +1330,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       let snap;
       if (profileRef.current?.role === "master") {
         snap = await getDocs(classesRef);
+      } else if (profileRef.current?.role === "student" && profileRef.current?.uid) {
+        // Alunos: só veem turmas em que estão matriculados (satisfaz regras do Firestore)
+        const studentClassesQuery = query(
+          classesRef,
+          where("active", "==", true),
+          where("studentIds", "array-contains", profileRef.current.uid)
+        );
+        snap = await getDocs(studentClassesQuery);
       } else {
-        // Query com filtro para satisfazer as regras de segurança do Firestore
+        // Professores e outros: todas as turmas ativas
         const activeClassesQuery = query(classesRef, where("active", "==", true));
         snap = await getDocs(activeClassesQuery);
       }

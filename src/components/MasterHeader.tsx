@@ -56,7 +56,15 @@ export default function MasterHeader({ onNavigate, isHome = false }: MasterHeade
             </View>
           </View>
         )}
-        <NotificationBell iconColor="#1E293B" size={24} onNavigate={navigateTo} />
+        <View style={styles.headerRight}>
+          <NotificationBell iconColor="#1E293B" size={24} onNavigate={navigateTo} />
+          <Pressable
+            onPress={() => navigateTo("Configuracoes")}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="settings-outline" size={24} color="#1E293B" />
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -112,5 +120,10 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#fff",
     letterSpacing: 0.5,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
 });

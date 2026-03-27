@@ -14,7 +14,7 @@ import { useAuth, Profile } from "../../contexts/AuthContext";
 import { useTheme } from "../../contexts/ThemeContext";
 import { usePayment, Invoice, Transaction, formatCurrency, toCents, toReais, PaymentMethod, FinancialSummary, TierPricing, PaymentSettings } from "../../contexts/PaymentContext";
 import { useActivity } from "../../contexts/ActivityContext";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs } from "../../services/postgresFirestoreCompat";
 import { db } from "../../services/firebase";
 import { USE_MERCADO_PAGO } from "../../services/mercadoPagoService";
 
@@ -1042,7 +1042,7 @@ export default function TeacherFinanceScreen() {
     };
     settings: PaymentSettings | null;
   }> => {
-    const currentMonth = month;
+    const currentMonth = navigateMonth(month, "next");
     const settings = await getPaymentSettings();
     
     if (!settings) {
@@ -1179,7 +1179,7 @@ export default function TeacherFinanceScreen() {
   const handleGenerateInitialInvoices = async () => {
     setProcessing(true);
     try {
-      const currentMonth = month;
+      const currentMonth = navigateMonth(month, "next");
       
       // Buscar faturas existentes do mês
       const existingInvoices = await fetchInvoices({ month: currentMonth });
@@ -2023,7 +2023,7 @@ export default function TeacherFinanceScreen() {
               <View style={styles.gmHeaderIcon}>
                 <Ionicons name="flash" size={16} color="#D97706" />
               </View>
-              <Text style={styles.gmTitle}>Gerar Mensalidades</Text>
+              <Text style={styles.gmTitle}>Gerar Mensalidades — {formatMonthDisplay(navigateMonth(month, "next"))}</Text>
               <Pressable onPress={() => !processing && setShowInitialInvoicesModal(false)}>
                 <Ionicons name="close" size={20} color="#64748B" />
               </Pressable>
@@ -2313,7 +2313,7 @@ export default function TeacherFinanceScreen() {
       {/* Modal: Valores e Descontos */}
       <Modal visible={showPricingModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.vmModal}>
+          <View style={[styles.vmModal, isDesktopMode && dkStyles.vmModal]}>
 
             {/* Header compacto */}
             <View style={styles.vmHeader}>
@@ -2797,15 +2797,6 @@ export default function TeacherFinanceScreen() {
               </Pressable>
             )}
 
-            <View style={styles.toolbarDivider} />
-
-            <Pressable
-              style={styles.toolbarBtn}
-              onPress={handleOpenSettings}
-            >
-              <Ionicons name="settings-outline" size={15} color="#64748B" />
-              <Text style={styles.toolbarBtnText}>Configurações</Text>
-            </Pressable>
           </View>
         ) : (
           <View style={styles.actionToolbarMobile}>
@@ -2837,15 +2828,6 @@ export default function TeacherFinanceScreen() {
               </Pressable>
             )}
 
-            {!isMaster && (
-              <Pressable
-                style={styles.toolbarBtnMobile}
-                onPress={handleOpenSettings}
-              >
-                <Ionicons name="settings-outline" size={22} color="#64748B" />
-                <Text style={styles.toolbarBtnMobileText}>Configurações</Text>
-              </Pressable>
-            )}
           </View>
         )}
 
@@ -5230,6 +5212,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 18,
     width: "100%",
+    maxWidth: 440,
     maxHeight: "86%",
     overflow: "hidden",
   },
@@ -5479,6 +5462,10 @@ const dkStyles = StyleSheet.create({
   // Modal desktop
   modalScroll: {
     padding: 32,
+  },
+  vmModal: {
+    maxWidth: 480,
+    maxHeight: "80%",
   },
   settingsModal: {
     maxWidth: 600,

@@ -3,7 +3,7 @@ import { JsonObject, query as dbQuery } from "./db";
 import { getDocument, listDocuments, setDocument, updateDocument, deleteDocument } from "./doc-store";
 import { makeId, sanitizeString } from "./http";
 import { checkRateLimit } from "./rate-limit";
-import { processChatbotReply } from "./chatbot";
+import { processChatbotReply, transcribeAudio } from "./chatbot";
 
 // ============================================================
 // Evolution API Integration
@@ -37,12 +37,38 @@ type Audience = {
   studentIds?: string[];
 };
 
+/**
+ * Normaliza telefone para formato completo: 55 + DDD + 9 dígitos.
+ * Lida com variações: +55, 0xx, com/sem nono dígito, parênteses, traços, espaços.
+ */
 function normalizePhone(phone: string): string {
-  let cleaned = phone.replace(/\D/g, "");
-  if (!cleaned.startsWith("55")) {
-    cleaned = `55${cleaned}`;
+  let digits = phone.replace(/\D/g, "");
+
+  // Remover prefixo 0 de discagem interurbana (0xx)
+  if (digits.startsWith("0") && !digits.startsWith("00")) {
+    digits = digits.slice(1);
   }
-  return cleaned;
+
+  // Remover código país 55 para normalizar
+  if (digits.startsWith("55") && digits.length >= 12) {
+    digits = digits.slice(2);
+  }
+
+  // Se tem 10 dígitos (DDD + 8), adiciona o nono dígito (9) após o DDD
+  if (digits.length === 10) {
+    const ddd = digits.slice(0, 2);
+    const number = digits.slice(2);
+    digits = `${ddd}9${number}`;
+  }
+
+  // Adicionar código país
+  if (digits.length === 11) {
+    digits = `55${digits}`;
+  } else if (!digits.startsWith("55")) {
+    digits = `55${digits}`;
+  }
+
+  return digits;
 }
 
 function trimDocument<T extends JsonObject>(doc: { id: string; data: T }) {
@@ -97,6 +123,45 @@ export async function getInstanceStatus(): Promise<{
     };
   } catch {
     return { connected: false, state: "close", instanceName: instance };
+  }
+}
+
+function extractInstanceOwnerPhone(instancePayload: any): string | null {
+  const owner =
+    instancePayload?.instance?.owner ||
+    instancePayload?.owner ||
+    instancePayload?.instance?.wuid ||
+    instancePayload?.wuid;
+
+  if (typeof owner !== "string" || !owner.trim()) {
+    return null;
+  }
+
+  const phone = owner.replace(/@.*$/, "").replace(/\D/g, "");
+  return phone ? normalizePhone(phone) : null;
+}
+
+export async function getInstanceContactPhone(): Promise<string | null> {
+  const instance = getEvolutionInstanceName();
+
+  try {
+    const data = await evolutionFetch(`/instance/fetchInstances?instanceName=${encodeURIComponent(instance)}`);
+    const instances = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.response)
+        ? data.response
+        : Array.isArray(data?.instances)
+          ? data.instances
+          : [];
+
+    const matchingInstance =
+      instances.find((item: any) => item?.instance?.instanceName === instance || item?.instanceName === instance) ||
+      instances[0];
+
+    return extractInstanceOwnerPhone(matchingInstance);
+  } catch (error) {
+    console.warn("[WhatsApp] Nao foi possivel obter o numero conectado da instancia:", (error as Error)?.message || error);
+    return null;
   }
 }
 
@@ -287,6 +352,69 @@ export async function sendWhatsAppText(to: string, body: string): Promise<string
   });
 
   return result?.key?.id || result?.messageId;
+}
+
+export async function sendWhatsAppAudio(to: string, audioBase64: string): Promise<string | undefined> {
+  const instance = getEvolutionInstanceName();
+  console.log(`[WhatsApp] Enviando áudio para ${to} (${audioBase64.length} chars base64)`);
+
+  // Tenta endpoint de nota de voz (ptt) primeiro — base64 puro sem prefixo data URI
+  try {
+    const result = await evolutionFetch(`/message/sendWhatsAppAudio/${instance}`, {
+      method: "POST",
+      body: JSON.stringify({
+        number: to,
+        audio: audioBase64,
+        encoding: true,
+      }),
+    });
+    console.log("[WhatsApp] Áudio enviado via sendWhatsAppAudio");
+    return result?.key?.id || result?.messageId;
+  } catch (err1) {
+    console.log("[WhatsApp] sendWhatsAppAudio falhou, tentando sendMedia com data URI...", (err1 as any)?.message);
+    try {
+      const result = await evolutionFetch(`/message/sendMedia/${instance}`, {
+        method: "POST",
+        body: JSON.stringify({
+          number: to,
+          mediatype: "audio",
+          media: `data:audio/mpeg;base64,${audioBase64}`,
+          fileName: "audio.mp3",
+        }),
+      });
+      console.log("[WhatsApp] Áudio enviado via sendMedia");
+      return result?.key?.id || result?.messageId;
+    } catch (err2) {
+      console.error("[WhatsApp] Ambos os endpoints de áudio falharam:", (err2 as any)?.message);
+      throw err2;
+    }
+  }
+}
+
+async function getMediaBase64(fullMessage: any): Promise<string | null> {
+  const instance = getEvolutionInstanceName();
+  console.log("[WhatsApp] getMediaBase64 — baixando áudio...", JSON.stringify(fullMessage?.key).substring(0, 100));
+
+  try {
+    // O endpoint exige o objeto message completo (key + message content)
+    const result = await evolutionFetch(`/chat/getBase64FromMediaMessage/${instance}`, {
+      method: "POST",
+      body: JSON.stringify({ message: fullMessage }),
+    });
+
+    // A resposta pode conter base64 diretamente ou dentro de um wrapper
+    const b64 = result?.base64 || result?.data?.base64 || result?.media;
+    if (b64) {
+      console.log(`[WhatsApp] getMediaBase64 OK — ${String(b64).length} chars`);
+      return b64;
+    }
+
+    console.error("[WhatsApp] getMediaBase64: resposta sem base64:", JSON.stringify(result).substring(0, 500));
+    return null;
+  } catch (err) {
+    console.error("[WhatsApp] getMediaBase64 falhou:", err);
+    return null;
+  }
 }
 
 async function sendWhatsAppMedia(
@@ -552,7 +680,7 @@ export async function getBroadcastStats(): Promise<{
 
 export async function sendBroadcast(
   userId: string,
-  payload: { templateId?: string; audience?: Audience; variables?: Record<string, string>; imageUrl?: string }
+  payload: { templateId?: string; audience?: Audience; variables?: Record<string, string>; imageUrl?: string; customContent?: string }
 ): Promise<{ success: boolean; count: number; failed: number; errors: string[] }> {
   checkRateLimit(`sendWhatsAppMessage_${userId}`);
 
@@ -576,7 +704,8 @@ export async function sendBroadcast(
 
   for (const recipient of recipients) {
     try {
-      let content = String(template.content || "");
+      // Usa customContent se o usuário editou a mensagem; caso contrário, usa o template original
+      let content = String(payload.customContent || template.content || "");
       for (const [key, value] of Object.entries(payload.variables || {})) {
         content = content.replace(new RegExp(`{{${key}}}`, "g"), value);
       }
@@ -720,12 +849,36 @@ export async function deleteConversation(conversationId: string): Promise<{ succ
   if (!conversationId) {
     throw new ApiError(400, "invalid-argument", "conversationId é obrigatório");
   }
-  // Delete conversation and its messages
+
+  // Buscar conversa para obter o telefone antes de deletar
+  const conversation = await getDocument("whatsapp_conversations", conversationId);
+  const studentPhone = conversation?.studentPhone as string | undefined;
+
+  // Tentar arquivar e limpar o chat no WhatsApp (best-effort — não falha se indisponível)
+  if (studentPhone) {
+    const instance = getEvolutionInstanceName();
+    const remoteJid = `${studentPhone}@s.whatsapp.net`;
+
+    // Arquivar o chat
+    evolutionFetch(`/chat/archiveChat/${instance}`, {
+      method: "POST",
+      body: JSON.stringify({ chat: remoteJid, archive: true }),
+    }).catch(() => {});
+
+    // Deletar mensagens do lado do bot no WhatsApp (limpa histórico local do dispositivo)
+    evolutionFetch(`/chat/deleteMessage/${instance}`, {
+      method: "DELETE",
+      body: JSON.stringify({ remoteJid, fromMe: true }),
+    }).catch(() => {});
+  }
+
+  // Deletar mensagens e conversa do banco
   const msgResult = await dbQuery(
     `DELETE FROM app_documents WHERE collection_name = 'whatsapp_messages' AND data->>'conversationId' = $1`,
     [conversationId]
   );
   await deleteDocument("whatsapp_conversations", conversationId);
+
   return { success: true, deleted: (msgResult.rowCount ?? 0) + 1 };
 }
 
@@ -734,6 +887,9 @@ export async function markConversationResolved(conversationId: string): Promise<
     status: "resolved",
     unreadCount: 0,
     updatedAt: Date.now(),
+    // Ao resolver, reativa o bot para a próxima conversa
+    botPhase: "active",
+    botTurns: 0,
   });
   return { success: true };
 }
@@ -743,15 +899,41 @@ export async function markConversationResolved(conversationId: string): Promise<
 // ============================================================
 
 async function findStudentByPhone(phone: string): Promise<{ studentId: string; studentName: string } | null> {
+  const normalizedPhone = normalizePhone(phone);
+  if (!normalizedPhone || normalizedPhone.length < 8) return null;
+
   const students = await listDocuments("profiles", [
     { type: "where", field: "role", op: "==", value: "student" },
     { type: "limit", value: 5000 },
   ]);
 
-  const match = students.find((student) => {
+  // Tentativa 1: match exato pelo telefone completo normalizado
+  let match = students.find((student) => {
     const candidate = typeof student.data.phone === "string" ? normalizePhone(student.data.phone) : "";
-    return candidate.endsWith(phone.slice(-9));
+    return candidate === normalizedPhone;
   });
+
+  // Tentativa 2: match pelos últimos 10 dígitos (DDD + número)
+  if (!match) {
+    const last10 = normalizedPhone.slice(-10);
+    if (last10.length === 10) {
+      match = students.find((student) => {
+        const candidate = typeof student.data.phone === "string" ? normalizePhone(student.data.phone) : "";
+        return candidate.slice(-10) === last10;
+      });
+    }
+  }
+
+  // Tentativa 3: match pelos últimos 9 dígitos
+  if (!match) {
+    const last9 = normalizedPhone.slice(-9);
+    if (last9.length === 9) {
+      match = students.find((student) => {
+        const candidate = typeof student.data.phone === "string" ? normalizePhone(student.data.phone) : "";
+        return candidate.slice(-9) === last9;
+      });
+    }
+  }
 
   if (!match) return null;
 
@@ -761,7 +943,7 @@ async function findStudentByPhone(phone: string): Promise<{ studentId: string; s
   };
 }
 
-function extractMessageContent(messageContent: any, messageId: string): { content: string; mediaUrl: string; messageType: string } {
+function extractMessageContent(messageContent: any, messageId: string): { content: string; mediaUrl: string; messageType: string; hasAudio: boolean } {
   let content = "";
   let mediaUrl = "";
   let messageType = "text";
@@ -799,7 +981,7 @@ function extractMessageContent(messageContent: any, messageId: string): { conten
     content = "[Mensagem não suportada]";
   }
 
-  return { content, mediaUrl, messageType };
+  return { content, mediaUrl, messageType, hasAudio: messageType === "audio" };
 }
 
 async function processWebhookMessage(data: any): Promise<void> {
@@ -879,6 +1061,11 @@ async function processWebhookMessage(data: any): Promise<void> {
     if (!isFromMe) {
       updateData.unreadCount = Number(current.unreadCount || 0) + 1;
       updateData.status = "open";
+      // Reativa o bot quando o usuário envia mensagem após a conversa ser resolvida
+      if (current.status === "resolved") {
+        updateData.botPhase = "active";
+        updateData.botTurns = 0;
+      }
     }
 
     await updateDocument("whatsapp_conversations", conversationId, updateData);
@@ -895,7 +1082,7 @@ async function processWebhookMessage(data: any): Promise<void> {
     timestamp,
   });
 
-  // Disparar chatbot para mensagens de texto recebidas de estudantes
+  // Disparar chatbot para mensagens de texto ou áudio recebidas de estudantes
   // IMPORTANTE: deve ser aguardado em serverless (Vercel encerra o processo ao enviar a resposta HTTP)
   if (!isFromMe && messageType === "text") {
     await processChatbotReply(
@@ -903,7 +1090,47 @@ async function processWebhookMessage(data: any): Promise<void> {
       contactPhone,
       studentName,
       content,
-      sendWhatsAppText
+      sendWhatsAppText,
+      sendWhatsAppAudio,
+      false
+    );
+  } else if (!isFromMe && messageType === "audio") {
+    console.log(`[WhatsApp] Áudio recebido de ${contactPhone}, messageId: ${messageId}`);
+
+    // Baixar áudio via Evolution API — passa o message completo (key + content)
+    const fullMessage = { key, message: messageContent };
+    let transcription: string | null = null;
+    let canRespondAudio = false;
+
+    const audioBase64 = await getMediaBase64(fullMessage);
+    if (audioBase64) {
+      console.log("[WhatsApp] Áudio baixado com sucesso, transcrevendo...");
+      transcription = await transcribeAudio(audioBase64);
+      canRespondAudio = true;
+      if (transcription) {
+        console.log(`[WhatsApp] Transcrição: "${transcription}"`);
+        // Atualiza a mensagem salva com a transcrição real
+        await dbQuery(
+          `UPDATE app_documents SET data = data || $1::jsonb
+           WHERE collection_name = 'whatsapp_messages' AND data->>'waMessageId' = $2`,
+          [JSON.stringify({ content: `🎤 ${transcription}` }), messageId]
+        );
+      } else {
+        console.error("[WhatsApp] Transcrição retornou null");
+      }
+    } else {
+      console.error("[WhatsApp] Não foi possível baixar o áudio da mensagem:", messageId);
+    }
+
+    // Sempre aciona o chatbot — com áudio se possível, texto como fallback
+    await processChatbotReply(
+      conversationId,
+      contactPhone,
+      studentName,
+      transcription || "O usuário enviou um áudio mas não foi possível transcrever. Peça gentilmente que envie por texto.",
+      sendWhatsAppText,
+      sendWhatsAppAudio,
+      canRespondAudio
     );
   }
 }

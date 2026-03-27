@@ -30,7 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     id: "aulas",
-    label: "Minhas Aulas",
+    label: "Minhas Turmas",
     icon: <Ionicons name="calendar-outline" size={18} color="#94A3B8" />,
     iconActive: <Ionicons name="calendar" size={18} color="#7C3AED" />,
   },
@@ -50,7 +50,7 @@ const NAV_ITEMS: NavItem[] = [
 
 const TAB_TITLES: Record<StudentTab, { title: string; subtitle?: string }> = {
   inicio: { title: "Início", subtitle: "Bem-vindo ao CDMF" },
-  aulas: { title: "Minhas Aulas", subtitle: "Suas turmas e horários" },
+  aulas: { title: "Minhas Turmas", subtitle: "Suas turmas e horários" },
   pagamentos: { title: "Pagamentos", subtitle: "Histórico e pendências" },
   conta: { title: "Minha Conta", subtitle: "Configurações do perfil" },
 };

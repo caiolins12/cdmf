@@ -194,7 +194,16 @@ export default function MasterCommunicationsScreen() {
     const handleMarkResolved = useCallback(async () => {
         if (!selectedConversation) return;
         await WhatsAppService.markAsResolved(selectedConversation.id);
-        setSelectedConversation((prev) => (prev ? { ...prev, status: "resolved" } : null));
+        setSelectedConversation((prev) => (prev ? { ...prev, status: "resolved", botPhase: "active" } : null));
+    }, [selectedConversation]);
+
+    const handleDisableBot = useCallback(async () => {
+        if (!selectedConversation) return;
+        await WhatsAppService.setBotPhase(selectedConversation.id, "disabled");
+        setSelectedConversation((prev) => (prev ? { ...prev, botPhase: "disabled" } : null));
+        setConversations((prev) =>
+            prev.map((c) => (c.id === selectedConversation.id ? { ...c, botPhase: "disabled" } : c))
+        );
     }, [selectedConversation]);
 
     const handleClearAllConversations = useCallback(async () => {
@@ -759,6 +768,7 @@ export default function MasterCommunicationsScreen() {
                                 onSendMessage={handleSendMessage}
                                 onMarkResolved={handleMarkResolved}
                                 onDeleteConversation={handleDeleteConversation}
+                                onDisableBot={handleDisableBot}
                             />
                         </View>
                     </View>

@@ -534,7 +534,7 @@ export default function MasterClassesScreen() {
                   const isToggling = togglingStudentId === student.uid;
                   const initial = (student.name || "?")[0].toUpperCase();
                   return (
-                    <View key={student.uid} style={[styles.smRow, isInClass ? styles.smRowIn : styles.smRowOut]}>
+                    <Pressable key={student.uid} style={[styles.smRow, isInClass ? styles.smRowIn : styles.smRowOut]} onPress={() => handleViewStudentDetails(student)}>
                       <View style={[styles.smAvatar, { backgroundColor: isInClass ? colors.green + "20" : "#F1F5F9" }]}>
                         <Text style={[styles.smAvatarText, { color: isInClass ? colors.green : "#64748B" }]}>{initial}</Text>
                       </View>
@@ -555,7 +555,7 @@ export default function MasterClassesScreen() {
                       </View>
                       <Pressable
                         style={[styles.smToggleBtn, isInClass ? styles.smToggleBtnIn : styles.smToggleBtnOut, isToggling && styles.smToggleBtnBusy]}
-                        onPress={() => !isToggling && !togglingStudentId && handleToggleStudent(student.uid)}
+                        onPress={(e) => { e.stopPropagation?.(); if (!isToggling && !togglingStudentId) handleToggleStudent(student.uid); }}
                         disabled={!!togglingStudentId}
                       >
                         {isToggling ? (
@@ -564,7 +564,7 @@ export default function MasterClassesScreen() {
                           <Ionicons name={isInClass ? "remove" : "add"} size={18} color={isInClass ? colors.danger : colors.green} />
                         )}
                       </Pressable>
-                    </View>
+                    </Pressable>
                   );
                 };
 

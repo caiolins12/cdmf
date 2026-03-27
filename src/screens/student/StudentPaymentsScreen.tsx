@@ -20,6 +20,7 @@ import {
   pollPaymentStatus,
   checkMercadoPagoPayment 
 } from "../../services/mercadoPagoService";
+import { useWhatsAppContact } from "../../utils/whatsapp";
 
 // Função segura para formatar data no formato DD/MM/YYYY
 const formatDateSafe = (dateStr: any): string => {
@@ -56,12 +57,12 @@ const badgeStyles = StyleSheet.create({
   text: { fontSize: 12, fontWeight: "700" },
 });
 
-function InvoiceCard({ 
-  invoice, 
+function InvoiceCard({
+  invoice,
   onPress,
   themeColors,
-}: { 
-  invoice: Invoice; 
+}: {
+  invoice: Invoice;
   onPress: () => void;
   themeColors: any;
 }) {
@@ -69,91 +70,79 @@ function InvoiceCard({
   const dueDate = formatDateSafe(invoice.dueDate);
   const lateDueDate = invoice.lateDueDate ? formatDateSafe(invoice.lateDueDate) : null;
   const hasDiscount = invoice.discountAmount > 0;
-  
-  // Verifica se ainda está no período de desconto
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const earlyDeadline = new Date(invoice.dueDate + "T23:59:59");
   const isInDiscountPeriod = today <= earlyDeadline && isPending;
 
+  const amountColor = invoice.status === "paid"
+    ? colors.green
+    : invoice.status === "overdue"
+      ? "#DC2626"
+      : isInDiscountPeriod && hasDiscount
+        ? colors.green
+        : themeColors.text;
+
+  const dateLabel = isPending
+    ? isInDiscountPeriod
+      ? `Desconto até ${dueDate}`
+      : `Vence ${lateDueDate ?? dueDate}`
+    : invoice.paidAt
+      ? `Pago em ${new Date(invoice.paidAt).toLocaleDateString("pt-BR")}`
+      : `Pago em ${dueDate}`;
+
   return (
-    <Pressable 
+    <Pressable
       style={({ pressed }) => [
-        styles.invoiceCard, 
+        styles.invoiceCard,
         { backgroundColor: themeColors.bgCard, borderColor: themeColors.border },
-        pressed && { opacity: 0.9 }
-      ]} 
+        pressed && { opacity: 0.9 },
+      ]}
       onPress={onPress}
     >
-      <View style={styles.invoiceHeader}>
-        <View style={styles.invoiceInfo}>
-          <Text style={[styles.invoiceTitle, { color: themeColors.text }]}>{invoice.description}</Text>
-          
-          {/* Info de turmas */}
-          {invoice.classCount > 0 && (
-            <View style={styles.classesBadge}>
-              <Ionicons name="school-outline" size={12} color={colors.purple} />
-              <Text style={styles.classesBadgeText}>{invoice.classCount} turma{invoice.classCount > 1 ? "s" : ""}</Text>
-            </View>
+      {/* Linha 1: status + valor */}
+      <View style={styles.invoiceTopRow}>
+        <StatusBadge status={invoice.status} />
+        <View style={styles.invoiceAmountArea}>
+          {hasDiscount && isInDiscountPeriod && (
+            <Text style={[styles.invoiceOriginalAmount, { color: themeColors.textMuted }]}>
+              {formatCurrency(invoice.originalAmount)}
+            </Text>
           )}
-          
-          {/* Datas de vencimento */}
-          <Text style={[styles.invoiceDue, { color: themeColors.textMuted }]}>
-            {isPending 
-              ? isInDiscountPeriod 
-                ? `Com desconto até: ${dueDate}`
-                : lateDueDate 
-                  ? `Vencimento: ${lateDueDate}` 
-                  : `Vencimento: ${dueDate}`
-              : `Pago em: ${invoice.paidAt ? new Date(invoice.paidAt).toLocaleDateString("pt-BR") : dueDate}`
-            }
+          <Text style={[styles.invoiceAmount, { color: amountColor }]}>
+            {formatCurrency(invoice.amount)}
           </Text>
-        </View>
-        <View style={styles.invoiceRight}>
-          {/* Valor com desconto destacado */}
-          {hasDiscount && isInDiscountPeriod ? (
-            <>
-              <Text style={[styles.invoiceOriginalAmount, { color: themeColors.textMuted }]}>
-                {formatCurrency(invoice.originalAmount)}
-              </Text>
-              <Text style={[styles.invoiceAmount, { color: colors.green }]}>
-                {formatCurrency(invoice.amount)}
-              </Text>
-              <View style={styles.discountBadge}>
-                <Ionicons name="pricetag" size={10} color="#059669" />
-                <Text style={styles.discountText}>-{formatCurrency(invoice.discountAmount)}</Text>
-              </View>
-            </>
-          ) : (
-            <Text style={[styles.invoiceAmount, { color: themeColors.text }]}>{formatCurrency(invoice.amount)}</Text>
-          )}
-          <StatusBadge status={invoice.status} />
         </View>
       </View>
 
-      {/* Info de período de desconto */}
-      {hasDiscount && isPending && (
-        <View style={[styles.discountInfo, isInDiscountPeriod ? styles.discountInfoActive : styles.discountInfoExpired]}>
-          <Ionicons 
-            name={isInDiscountPeriod ? "time-outline" : "alert-circle-outline"} 
-            size={14} 
-            color={isInDiscountPeriod ? "#059669" : "#D97706"} 
-          />
-          <Text style={[styles.discountInfoText, { color: isInDiscountPeriod ? "#059669" : "#D97706" }]}>
-            {isInDiscountPeriod 
-              ? `Pague até ${dueDate} e economize ${formatCurrency(invoice.discountAmount)}!`
-              : `Desconto expirado. Valor normal: ${formatCurrency(invoice.originalAmount)}`
-            }
-          </Text>
-        </View>
-      )}
-      
-      {isPending && (
-        <View style={styles.invoiceAction}>
-          <View style={[styles.payNowBtn, { backgroundColor: colors.purple }]}>
-            <Ionicons name="qr-code-outline" size={16} color="#fff" />
-            <Text style={styles.payNowText}>Pagar com PIX</Text>
+      {/* Linha 2: título */}
+      <Text style={[styles.invoiceTitle, { color: themeColors.text }]} numberOfLines={1}>
+        {invoice.description.split(" | ")[0]}
+      </Text>
+
+      {/* Linha 3: meta (turmas · desconto · data) */}
+      <View style={styles.invoiceMeta}>
+        {invoice.classCount > 0 && (
+          <View style={styles.classesBadge}>
+            <Ionicons name="school-outline" size={11} color={colors.purple} />
+            <Text style={styles.classesBadgeText}>{invoice.classCount} turma{invoice.classCount > 1 ? "s" : ""}</Text>
           </View>
+        )}
+        {hasDiscount && isInDiscountPeriod && (
+          <View style={styles.discountBadge}>
+            <Ionicons name="pricetag" size={10} color="#059669" />
+            <Text style={styles.discountText}>-{formatCurrency(invoice.discountAmount)}</Text>
+          </View>
+        )}
+        <Text style={[styles.invoiceDue, { color: themeColors.textMuted }]}>{dateLabel}</Text>
+      </View>
+
+      {/* Botão PIX */}
+      {isPending && (
+        <View style={[styles.payNowBtn, { backgroundColor: colors.purple, marginTop: 14 }]}>
+          <Ionicons name="qr-code-outline" size={16} color="#fff" />
+          <Text style={styles.payNowText}>Pagar com PIX</Text>
         </View>
       )}
     </Pressable>
@@ -202,6 +191,7 @@ export default function StudentPaymentsScreen() {
   const { isDesktopMode } = useDesktop();
   const { colors: themeColors, isDark } = useTheme();
   const { profile } = useAuth();
+  const { buildUrl: buildWhatsAppUrl } = useWhatsAppContact();
   const {
     fetchInvoices,
     subscribeToInvoices,
@@ -246,12 +236,28 @@ export default function StudentPaymentsScreen() {
   const [creatingGuestInvoice, setCreatingGuestInvoice] = useState(false);
   const [guestVouchers, setGuestVouchers] = useState<BaileVoucher[]>([]);
 
-  // Support links
+  // Support links com número dinâmico do WhatsApp
   const supportLinks = [
-    { text: "Problemas no pagamento", icon: "help-circle-outline" as const, url: "https://wa.me/5500000000000?text=Olá, estou com problemas no pagamento" },
-    { text: "Valor incorreto", icon: "alert-circle-outline" as const, url: "https://wa.me/5500000000000?text=Olá, o valor da mensalidade está incorreto" },
-    { text: "Falar com suporte", icon: "chatbubbles-outline" as const, url: "https://wa.me/5500000000000" },
+    { 
+      text: "Problemas no pagamento", 
+      icon: "help-circle-outline" as const, 
+      message: "Olá! Estou com problemas no pagamento da minha mensalidade. Pode me ajudar?",
+    },
+    { 
+      text: "Valor incorreto", 
+      icon: "alert-circle-outline" as const, 
+      message: "Olá! O valor da minha mensalidade parece estar incorreto. Pode verificar?",
+    },
+    { 
+      text: "Falar com suporte", 
+      icon: "chatbubbles-outline" as const, 
+      message: "Olá! Preciso de ajuda com meus pagamentos.",
+    },
   ];
+
+  const openSupportLink = (message: string) => {
+    Linking.openURL(buildWhatsAppUrl(message));
+  };
 
   // Carrega faturas e vouchers (fallback para quando listener falha)
   const loadData = useCallback(async () => {
@@ -1021,7 +1027,7 @@ export default function StudentPaymentsScreen() {
                               </Text>
                             </Pressable>
                             <Pressable
-                              style={[styles.generateNewPixBtn, { borderColor: themeColors.border, flex: 1, margin: 0, opacity: generatingPix ? 0.6 : 1 }]}
+                              style={[styles.generateNewPixBtn, { borderColor: themeColors.border, flex: 1, opacity: generatingPix ? 0.6 : 1 }]}
                               onPress={handleForceGenerateNewPix}
                               disabled={generatingPix || checkingPayment}
                             >
@@ -1382,10 +1388,12 @@ export default function StudentPaymentsScreen() {
                           <Pressable
                             style={styles.companionBtnWa}
                             onPress={() => {
-                              setShowVoucherModal(false);
-                              setGuestPhone("");
-                              setGuestModalTab("invite");
-                              setShowGuestModal(true);
+                              const eventName = selectedVoucher?.eventName || "evento";
+                              const msg =
+                                `Oi, gostaria de convidar você para o ${eventName}. 🎉\n` +
+                                `Basta acessar o link e confirmar sua participação:\n` +
+                                `https://cdmf.vercel.app/`;
+                              Linking.openURL(`https://wa.me/?text=${encodeURIComponent(msg)}`);
                             }}
                           >
                             <Ionicons name="logo-whatsapp" size={13} color="#fff" />
@@ -1675,8 +1683,10 @@ export default function StudentPaymentsScreen() {
                       onPress={() => {
                         setShowGuestModal(false);
                         const eventName = selectedVoucher?.eventName || "evento";
-                        const appUrl = "https://cdmf.vercel.app";
-                        const msg = `Olá! 🎉 Fui convidado(a) para o *${eventName}*.\n\nCrie sua conta no app CDMF, confirme presença e garanta seu voucher:\n👉 ${appUrl}`;
+                        const msg =
+                          `Oi, gostaria de convidar você para o ${eventName}. 🎉\n` +
+                          `Basta acessar o link e confirmar sua participação:\n` +
+                          `https://cdmf.vercel.app/`;
                         const encoded = encodeURIComponent(msg);
                         const url = guestPhone
                           ? `https://wa.me/55${guestPhone.replace(/\D/g, "")}?text=${encoded}`
@@ -1705,7 +1715,7 @@ export default function StudentPaymentsScreen() {
               <Pressable 
                 key={idx} 
                 style={[styles.supportItem, idx < supportLinks.length - 1 && { borderBottomWidth: 1, borderBottomColor: themeColors.border }]}
-                onPress={() => Linking.openURL(link.url)}
+                onPress={() => openSupportLink(link.message)}
               >
                 <Ionicons name={link.icon} size={20} color={colors.purple} />
                 <Text style={[styles.supportText, { color: themeColors.text }]}>{link.text}</Text>
@@ -1757,22 +1767,32 @@ const styles = StyleSheet.create({
 
   // Invoice Card
   invoicesList: { gap: 12 },
-  invoiceCard: { 
-    borderRadius: 12, 
+  invoiceCard: {
+    borderRadius: 14,
     padding: 16,
     borderWidth: 1,
   },
-  invoiceHeader: { flexDirection: "row", justifyContent: "space-between" },
-  invoiceInfo: { flex: 1, marginRight: 12 },
-  invoiceTitle: { fontSize: 15, fontWeight: "700" },
-  invoiceDue: { fontSize: 12, marginTop: 4 },
-  invoiceRight: { alignItems: "flex-end" },
-  invoiceAmount: { fontSize: 18, fontWeight: "800", marginBottom: 4 },
-  invoiceOriginalAmount: { 
-    fontSize: 14, 
-    fontWeight: "500", 
+  invoiceTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  invoiceAmountArea: { alignItems: "flex-end" },
+  invoiceTitle: { fontSize: 15, fontWeight: "700", lineHeight: 20 },
+  invoiceMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+  },
+  invoiceDue: { fontSize: 12, fontWeight: "500" },
+  invoiceAmount: { fontSize: 20, fontWeight: "800" },
+  invoiceOriginalAmount: {
+    fontSize: 12,
+    fontWeight: "500",
     textDecorationLine: "line-through",
-    marginBottom: 2,
   },
   discountBadge: {
     flexDirection: "row",
@@ -1782,7 +1802,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
-    marginBottom: 6,
   },
   discountText: {
     fontSize: 11,
@@ -1797,43 +1816,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
-    marginTop: 6,
-    alignSelf: "flex-start",
   },
   classesBadgeText: {
     fontSize: 11,
     fontWeight: "600",
     color: colors.purple,
   },
-  discountInfo: {
+  payNowBtn: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 8,
-    padding: 10,
-    borderRadius: 8,
-    marginTop: 12,
-  },
-  discountInfoActive: {
-    backgroundColor: "#D1FAE5",
-  },
-  discountInfoExpired: {
-    backgroundColor: "#FEF3C7",
-  },
-  discountInfoText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  invoiceAction: { marginTop: 14, alignItems: "center" },
-  payNowBtn: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    justifyContent: "center", 
-    gap: 8, 
     paddingVertical: 12,
-    paddingHorizontal: 16,
     borderRadius: 10,
-    alignSelf: "center",
   },
   payNowText: { color: "#fff", fontSize: 14, fontWeight: "700" },
 
@@ -1874,7 +1869,7 @@ const styles = StyleSheet.create({
 
   // PIX modal compacto (sem rolagem)
   pixCompactModal: { width: "100%", maxWidth: 400, borderRadius: 20, overflow: "hidden" },
-  pixCompactHeader: { flexDirection: "row", alignItems: "center", gap: 10, padding: 14, borderBottomWidth: 1 },
+  pixCompactHeader: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
   pixCompactIconBox: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   pixCompactTitle: { fontSize: 14, fontWeight: "700" },
   pixCompactDesc: { fontSize: 11, marginTop: 1 },
@@ -1883,9 +1878,9 @@ const styles = StyleSheet.create({
   pixCompactLoading: { alignItems: "center", paddingVertical: 32, gap: 12 },
   pixCompactConfirmed: { alignItems: "center", paddingVertical: 24, gap: 10 },
   pixCompactCodeRow: { marginHorizontal: 16, borderRadius: 10, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6 },
-  pixCompactActions: { flexDirection: "row", gap: 8, marginHorizontal: 16, marginTop: 8 },
+  pixCompactActions: { flexDirection: "row", gap: 8, marginHorizontal: 16, marginTop: 2, marginBottom: 12 },
   pixCompactDue: { paddingHorizontal: 16, paddingVertical: 8, borderTopWidth: 1, alignItems: "center" },
-  pixCompactFooter: { padding: 12, borderTopWidth: 1 },
+  pixCompactFooter: { padding: 16, borderTopWidth: 1 },
   pixCompactCloseBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, borderRadius: 10 },
   pixCompactCloseBtnText: { fontSize: 14, fontWeight: "600" },
   invoiceSummaryBox: { alignItems: "center", padding: 16, borderRadius: 12, marginBottom: 20 },
@@ -1922,7 +1917,8 @@ const styles = StyleSheet.create({
   pixSeparator: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 12,
+    marginTop: 4,
+    marginBottom: 12,
     gap: 10,
   },
   separatorLine: {
@@ -1996,8 +1992,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 10,
     borderWidth: 2,
-    marginTop: 8,
-    marginBottom: 8,
   },
   checkPaymentBtnText: {
     fontSize: 14,
@@ -2010,14 +2004,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: 10,
-    borderWidth: 1,
-    marginBottom: 16,
+    borderWidth: 2,
   },
   generateNewPixBtnText: {
-    fontSize: 13,
-    fontWeight: "500",
+    fontSize: 14,
+    fontWeight: "600",
   },
   
   // PIX expiration info

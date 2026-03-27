@@ -1,31 +1,75 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, RefreshControl } from "react-native";
+import React, { useState, useCallback, useRef } from "react";
+import {
+  View, Text, StyleSheet, Pressable, ScrollView,
+  RefreshControl, ActivityIndicator, Animated,
+} from "react-native";
+import { Ionicons, FontAwesome5 } from "@/shims/icons";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
+
 import { useAuth } from "../../contexts/AuthContext";
 import { colors } from "../../theme/colors";
-import CdmfHeader from "../../components/CdmfHeader";
-import TileButton from "../../components/TileButton";
-import { Ionicons, FontAwesome5 } from "@/shims/icons";
-import { useNavigation } from "@react-navigation/native";
+import NotificationBell from "../../components/NotificationBell";
 
 export default function TeacherHomeScreen() {
-  const { signOut, profile, user, fetchStudents } = useAuth();
+  const { profile, user, fetchStudents, fetchClasses, logout } = useAuth();
   const navigation = useNavigation<any>();
-  
-  const [studentsCount, setStudentsCount] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
 
-  const loadStats = async () => {
-    try {
-      const students = await fetchStudents();
-      setStudentsCount(students.length);
-    } catch (e) {
-      console.error("Erro ao carregar estatísticas:", e);
-    }
+  const [studentsCount, setStudentsCount] = useState(0);
+  const [classesCount, setClassesCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuAnim = useRef(new Animated.Value(0)).current;
+
+  const toggleMenu = () => {
+    const toValue = menuOpen ? 0 : 1;
+    setMenuOpen(!menuOpen);
+    Animated.spring(menuAnim, {
+      toValue,
+      useNativeDriver: false,
+      speed: 20,
+      bounciness: 4,
+    }).start();
   };
 
-  useEffect(() => {
-    loadStats();
-  }, []);
+  const handleLogout = async () => {
+    setMenuOpen(false);
+    menuAnim.setValue(0);
+    await logout();
+  };
+
+  const getFirstName = () => {
+    const name = profile?.name || user?.displayName;
+    return name ? name.split(" ")[0] : "Professor";
+  };
+
+  const currentHour = new Date().getHours();
+  const greeting =
+    currentHour < 12 ? "Bom dia" : currentHour < 18 ? "Boa tarde" : "Boa noite";
+
+  const loadStats = useCallback(async () => {
+    try {
+      const [studentsData, classesData] = await Promise.all([
+        fetchStudents(),
+        fetchClasses(),
+      ]);
+      setStudentsCount(studentsData.length);
+      const myClasses = classesData.filter(
+        (c) => c.teacherId === profile?.uid && c.active
+      );
+      setClassesCount(myClasses.length);
+    } catch (e) {
+      console.error("Erro ao carregar estatísticas:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchStudents, fetchClasses, profile?.uid]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadStats();
+    }, [loadStats])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -33,94 +77,165 @@ export default function TeacherHomeScreen() {
     setRefreshing(false);
   };
 
-  const getFirstName = () => {
-    if (profile?.name) {
-      return profile.name.split(" ")[0];
-    }
-    if (user?.displayName) {
-      return user.displayName.split(" ")[0];
-    }
-    return "Professor";
-  };
+  const navItems = [
+    {
+      route: "Presenca",
+      title: "Controle de Presença",
+      desc: "Registrar presença dos alunos",
+      icon: <Ionicons name="clipboard" size={22} color="#7C3AED" />,
+      iconBg: "#EDE9FE",
+    },
+    {
+      route: "Alunos",
+      title: "Meus Alunos",
+      desc: "Lista de alunos matriculados",
+      icon: <FontAwesome5 name="user-graduate" size={20} color="#0891B2" />,
+      iconBg: "#CFFAFE",
+    },
+    {
+      route: "Turmas",
+      title: "Minhas Turmas",
+      desc: "Turmas e horários",
+      icon: <FontAwesome5 name="users" size={20} color="#EA580C" />,
+      iconBg: "#FED7AA",
+    },
+    {
+      route: "Relatorios",
+      title: "Relatórios",
+      desc: "Estatísticas de presença",
+      icon: <Ionicons name="bar-chart" size={22} color="#16A34A" />,
+      iconBg: "#DCFCE7",
+    },
+  ];
 
-  const userName = getFirstName();
+  const menuHeight = menuAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 180],
+  });
+  const menuOpacity = menuAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0, 0.6, 1],
+  });
+
+  const initials = (profile?.name || user?.displayName || "P")
+    .split(" ")
+    .slice(0, 2)
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase();
 
   return (
     <View style={styles.screen}>
-      <CdmfHeader title={`Olá, ${userName}`} />
+      {/* Header */}
+      <View style={styles.header}>
+        <Pressable style={styles.avatarBtn} onPress={toggleMenu}>
+          <View style={styles.avatarCircle}>
+            <Text style={styles.avatarText}>{initials}</Text>
+          </View>
+          <Ionicons
+            name={menuOpen ? "chevron-up" : "chevron-down"}
+            size={14}
+            color={colors.purple}
+          />
+        </Pressable>
+
+        <Text style={styles.greeting} numberOfLines={1}>
+          {greeting}, {getFirstName()} 👋
+        </Text>
+
+        <NotificationBell iconColor="#1E293B" size={24} />
+      </View>
+
+      {/* Dropdown menu */}
+      <Animated.View style={[styles.menuPanel, { height: menuHeight, opacity: menuOpacity }]}>
+        <View style={styles.menuProfile}>
+          <View style={styles.menuAvatar}>
+            <Text style={styles.menuAvatarText}>{initials}</Text>
+          </View>
+          <View style={styles.menuInfo}>
+            <Text style={styles.menuName} numberOfLines={1}>{profile?.name || user?.displayName || "Professor"}</Text>
+            <Text style={styles.menuEmail} numberOfLines={1}>{profile?.email || user?.email || ""}</Text>
+            {profile?.teacherCode ? (
+              <View style={styles.menuCodeBadge}>
+                <Text style={styles.menuCodeText}>#{profile.teacherCode}</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+        <View style={styles.menuDivider} />
+        <Pressable style={styles.menuLogoutBtn} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={18} color={colors.danger} />
+          <Text style={styles.menuLogoutText}>Sair da conta</Text>
+        </Pressable>
+      </Animated.View>
 
       <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.purple]} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.purple]}
+          />
         }
       >
-        {/* Badge Professor */}
-        <View style={styles.teacherBadge}>
-          <FontAwesome5 name="chalkboard-teacher" size={14} color="#fff" />
-          <Text style={styles.teacherBadgeText}>PROFESSOR</Text>
-          {profile?.teacherCode && (
-            <View style={styles.codeContainer}>
-              <Text style={styles.codeText}>Código: {profile.teacherCode}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Estatísticas */}
-        <View style={styles.statsRow}>
-          <Pressable style={styles.statCard} onPress={() => navigation.navigate("Alunos")}>
-            <FontAwesome5 name="user-graduate" size={24} color={colors.purple} />
-            <Text style={styles.statNumber}>{studentsCount}</Text>
-            <Text style={styles.statLabel}>Alunos</Text>
-          </Pressable>
-          <Pressable style={styles.statCard} onPress={() => navigation.navigate("Turmas")}>
-            <FontAwesome5 name="users" size={24} color={colors.purple} />
-            <Text style={styles.statNumber}>0</Text>
-            <Text style={styles.statLabel}>Turmas</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.sectionTitleBox}>
-          <Text style={styles.sectionTitle}>MENU RÁPIDO</Text>
-        </View>
-
-        <View style={styles.grid}>
-          <View style={styles.row}>
-            <TileButton
-              label={"CONTROLE DE\nPRESENÇA"}
-              icon={<Ionicons name="clipboard" size={36} color="#111" />}
-              onPress={() => navigation.navigate("Presenca")}
-            />
-            <View style={{ width: 14 }} />
-            <TileButton
-              label="MEUS ALUNOS"
-              icon={<FontAwesome5 name="user-graduate" size={32} color="#111" />}
+        {/* Stats */}
+        {loading ? (
+          <View style={styles.statsLoadingBox}>
+            <ActivityIndicator size="small" color={colors.purple} />
+          </View>
+        ) : (
+          <View style={styles.statsGrid}>
+            <Pressable
+              style={styles.statCard}
               onPress={() => navigation.navigate("Alunos")}
-            />
-          </View>
+            >
+              <View style={[styles.statIcon, { backgroundColor: "#CFFAFE" }]}>
+                <FontAwesome5 name="user-graduate" size={18} color="#0891B2" />
+              </View>
+              <Text style={styles.statValue}>{studentsCount}</Text>
+              <Text style={styles.statLabel}>Alunos</Text>
+            </Pressable>
 
-          <View style={{ height: 14 }} />
-
-          <View style={styles.row}>
-            <TileButton
-              label="TURMAS"
-              icon={<FontAwesome5 name="users" size={32} color="#111" />}
+            <Pressable
+              style={styles.statCard}
               onPress={() => navigation.navigate("Turmas")}
-            />
-            <View style={{ width: 14 }} />
-            <TileButton
-              label={"MINHA\nCONTA"}
-              icon={<FontAwesome5 name="user-cog" size={32} color="#111" />}
-              onPress={() => {}}
-            />
+            >
+              <View style={[styles.statIcon, { backgroundColor: "#FED7AA" }]}>
+                <FontAwesome5 name="users" size={18} color="#EA580C" />
+              </View>
+              <Text style={styles.statValue}>{classesCount}</Text>
+              <Text style={styles.statLabel}>Turmas</Text>
+            </Pressable>
           </View>
+        )}
+
+        {/* Quick Access */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Acesso Rápido</Text>
         </View>
 
-        <Text style={styles.version}>Versão do APP: v1.0.0</Text>
+        <View style={styles.actionsGrid}>
+          {navItems.map((item) => (
+            <Pressable
+              key={item.route}
+              style={styles.actionCard}
+              onPress={() => navigation.navigate(item.route as any)}
+            >
+              <View style={[styles.actionIcon, { backgroundColor: item.iconBg }]}>
+                {item.icon}
+              </View>
+              <Text style={styles.actionTitle}>{item.title}</Text>
+              <Text style={styles.actionDesc}>{item.desc}</Text>
+            </Pressable>
+          ))}
+        </View>
 
-        <Pressable onPress={signOut} style={styles.logoutBtn}>
-          <Ionicons name="log-out-outline" size={20} color={colors.danger} />
-          <Text style={styles.logout}>Sair da Conta</Text>
-        </Pressable>
+        <View style={styles.versionBox}>
+          <Text style={styles.versionText}>CDMF v1.0.0</Text>
+        </View>
 
         <View style={{ height: 30 }} />
       </ScrollView>
@@ -129,88 +244,226 @@ export default function TeacherHomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  
-  teacherBadge: {
+  screen: { flex: 1, backgroundColor: "#F8FAFC" },
+
+  // Header
+  header: {
     flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+    gap: 10,
+  },
+  avatarBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  avatarCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: colors.purple,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#4CAF50",
-    paddingVertical: 10,
-    gap: 8,
-    flexWrap: "wrap",
   },
-  teacherBadgeText: {
-    color: "#fff",
-    fontWeight: "800",
+  avatarText: {
     fontSize: 12,
-    letterSpacing: 1,
-  },
-  codeContainer: {
-    backgroundColor: "rgba(255,255,255,0.2)",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginLeft: 8,
-  },
-  codeText: {
+    fontWeight: "800",
     color: "#fff",
+  },
+  greeting: {
+    flex: 1,
+    fontSize: 15,
     fontWeight: "700",
-    fontSize: 11,
+    color: "#1E293B",
   },
 
-  statsRow: {
+  // Dropdown menu
+  menuPanel: {
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  menuProfile: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "center",
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
     gap: 12,
-    maxWidth: 400,
+  },
+  menuAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: colors.purple,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuAvatarText: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#fff",
+  },
+  menuInfo: { flex: 1 },
+  menuName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1E293B",
+  },
+  menuEmail: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  menuCodeBadge: {
+    marginTop: 5,
+    alignSelf: "flex-start",
+    backgroundColor: "#EDE9FE",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  menuCodeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.purple,
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: "#F1F5F9",
+    marginHorizontal: 16,
+  },
+  menuLogoutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  menuLogoutText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.danger,
+  },
+
+  // Scroll
+  scroll: { flex: 1 },
+  scrollContent: { padding: 16 },
+
+  // Stats
+  statsLoadingBox: {
+    paddingVertical: 24,
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  statsGrid: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 20,
   },
   statCard: {
-    minWidth: 140,
-    maxWidth: 180,
-    backgroundColor: "#F5F5F5",
-    borderRadius: 16,
-    padding: 18,
+    flex: 1,
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 16,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#E0E0E0",
+    borderColor: "#E2E8F0",
+    shadowColor: "#64748B",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  statNumber: {
-    fontSize: 28,
-    fontWeight: "900",
-    color: colors.text,
-    marginTop: 8,
+  statIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  statValue: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#1E293B",
   },
   statLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748B",
     marginTop: 2,
   },
 
-  sectionTitleBox: {
-    backgroundColor: "#E6E6E6",
-    paddingVertical: 10,
-    alignItems: "center",
-    marginTop: 16,
+  // Section
+  sectionHeader: {
+    marginBottom: 12,
   },
-  sectionTitle: { fontWeight: "900", color: colors.text },
-  
-  grid: { padding: 16, paddingTop: 18, maxWidth: 500 },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: 14 },
-  
-  version: { textAlign: "center", color: colors.muted, marginTop: 8 },
-  
-  logoutBtn: {
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1E293B",
+  },
+
+  // Actions
+  actionsGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 20,
+  },
+  actionCard: {
+    width: "47%",
+    flexGrow: 1,
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#64748B",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  actionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    marginTop: 16,
+    marginBottom: 10,
   },
-  logout: { textAlign: "center", color: colors.danger, fontWeight: "900" },
+  actionTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1E293B",
+  },
+  actionDesc: {
+    fontSize: 11,
+    color: "#64748B",
+    marginTop: 2,
+  },
+
+  // Version
+  versionBox: {
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  versionText: {
+    fontSize: 11,
+    color: "#CBD5E1",
+    fontWeight: "600",
+  },
 });
-
-

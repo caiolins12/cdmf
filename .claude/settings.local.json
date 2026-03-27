@@ -37,7 +37,11 @@
       "Bash(git branch:*)",
       "Bash(git push:*)",
       "Bash(git rm:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(grep -v \"error\\\\|Error\\\\|//\")",
+      "Bash(find /d/myprojects/cdmf/src -name *.env* -o -name .env*)",
+      "Bash(grep -n \"POST\\\\|GET\\\\|PUT\\\\|DELETE\" /d/myprojects/cdmf/api/auth/[action].ts)",
+      "Bash(grep -r \"httpsCallable\\\\|getFunctions\\\\|from firebase\" /d/myprojects/cdmf/src --include=*.ts --include=*.tsx)"
     ]
   }
 }

@@ -17,6 +17,7 @@ import { showMessage, showSuccess, showError, showWarning, showInfo, showConfirm
 import { useStudentDesktopNav } from "../../contexts/StudentDesktopNavigationContext";
 import { Linking } from "react-native";
 import { formatCurrency, usePayment, Invoice, BaileVoucher } from "../../contexts/PaymentContext";
+import { useWhatsAppContact } from "../../utils/whatsapp";
 
 // Mapeamento de estilos de dança para ícones (mesmo do LessonCard)
 const DANCE_ICONS: Record<string, any> = {
@@ -200,6 +201,7 @@ function StudentHomeScreen() {
   const { logActivity } = useActivity();
   const desktopNav = useStudentDesktopNav();
   const navigation = useNavigation<any>();
+  const { buildUrl: buildWhatsAppUrl } = useWhatsAppContact();
 
   // ========== TODOS OS ESTADOS PRIMEIRO ==========
   const [myClasses, setMyClasses] = useState<Class[]>([]);
@@ -240,8 +242,7 @@ function StudentHomeScreen() {
   const shownInvitationIdsRef = useRef<Set<string>>(new Set());
   const showEventInvitationRef = useRef(showEventInvitation);
 
-  // Link do WhatsApp (trocar pelo real)
-  const whatsappLink = "https://wa.me/5500000000000";
+  // Link do WhatsApp dinâmico baseado nas configurações
 
   // Chave para armazenar convites mostrados (persiste durante a sessão do navegador)
   const SHOWN_INVITATIONS_KEY = `@cdmf_shown_invitations_${profile?.uid || 'guest'}`;
@@ -372,7 +373,7 @@ function StudentHomeScreen() {
 
     const setupListener = async () => {
       try {
-        const { doc, onSnapshot } = await import("firebase/firestore");
+        const { doc, onSnapshot } = await import("../../services/postgresFirestoreCompat");
         const { db } = await import("../../services/firebase");
 
         if (!isMounted) return;
@@ -472,8 +473,10 @@ function StudentHomeScreen() {
   };
 
   // Abre WhatsApp para contato
-  const handleContactWhatsApp = () => {
-    Linking.openURL(whatsappLink);
+  const handleContactWhatsApp = (message?: string) => {
+    Linking.openURL(
+      buildWhatsAppUrl(message || "Olá! Preciso de ajuda com minha conta, matrícula ou informações no app do CDMF.")
+    );
   };
 
   // Verifica sempre que a tela ganha foco
@@ -805,7 +808,7 @@ function StudentHomeScreen() {
     try {
       // Importa dinamicamente para evitar dependência circular
       import("../../services/firebase").then(({ db }) => {
-        import("firebase/firestore").then(({ collection, query, where, onSnapshot }) => {
+        import("../../services/postgresFirestoreCompat").then(({ collection, query, where, onSnapshot }) => {
           // Don't create listener if component unmounted during import
           if (!isMounted) return;
 
@@ -898,7 +901,7 @@ function StudentHomeScreen() {
     try {
       // Importa dinamicamente para evitar dependência circular
       import("../../services/firebase").then(({ db }) => {
-        import("firebase/firestore").then(({ collection, query, where, onSnapshot }) => {
+        import("../../services/postgresFirestoreCompat").then(({ collection, query, where, onSnapshot }) => {
           // Don't create listener if component unmounted during import
           if (!isMounted) return;
 
@@ -1163,11 +1166,18 @@ function StudentHomeScreen() {
 
   // Handler para enviar convite pelo WhatsApp diretamente
   const handleShareEventWhatsApp = useCallback((event: Event, phone?: string) => {
-    const appUrl = "https://cdmf.vercel.app";
-    const eventDate = event.date
-      ? new Date(event.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "long" })
-      : "";
-    const msg = `Olá! 🎉 Fui convidado(a) para o *${event.name}*${eventDate ? ` no dia ${eventDate}` : ""}.\n\nCrie sua conta no app CDMF, confirme presença e garanta seu voucher de entrada:\n👉 ${appUrl}`;
+    const eventEmojis: Record<string, string> = {
+      baile: "💃",
+      workshop: "🎓",
+      show: "🎤",
+      festa: "🎉",
+      aula: "🕺",
+    };
+    const emoji = eventEmojis[event.type] || "🎉";
+    const msg =
+      `Oi, gostaria de convidar você para o ${event.name}. ${emoji}\n` +
+      `Basta acessar o link e confirmar sua participação:\n` +
+      `https://cdmf.vercel.app/`;
     const encoded = encodeURIComponent(msg);
     const url = phone
       ? `https://wa.me/55${phone.replace(/\D/g, "")}?text=${encoded}`
@@ -1400,7 +1410,7 @@ function StudentHomeScreen() {
 
       // Cria notificação no perfil do aluno confirmando o cancelamento
       try {
-        const { doc, updateDoc, arrayUnion } = await import("firebase/firestore");
+        const { doc, updateDoc, arrayUnion } = await import("../../services/postgresFirestoreCompat");
         const { db } = await import("../../services/firebase");
         const studentRef = doc(db, "profiles", profile.uid);
         
@@ -1426,7 +1436,7 @@ function StudentHomeScreen() {
       // Cria atividade na coleção activities para o log do sistema
       try {
         const activityId = `ACT_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-        const { doc, setDoc, collection } = await import("firebase/firestore");
+        const { doc, setDoc, collection } = await import("../../services/postgresFirestoreCompat");
         const { db } = await import("../../services/firebase");
         await setDoc(doc(collection(db, "activities"), activityId), {
           id: activityId,
@@ -1580,8 +1590,8 @@ function StudentHomeScreen() {
     const todayDayOfWeek = now.getDay();
     
     let nextSchedule = null;
-    let daysUntilClass = 7;
-    
+    let daysUntilClass = 8;
+
     for (const schedule of classItem.schedule) {
       let daysUntil = schedule.dayOfWeek - todayDayOfWeek;
       if (daysUntil < 0) daysUntil += 7;
@@ -1593,7 +1603,7 @@ function StudentHomeScreen() {
           daysUntil = 7;
         }
       }
-      
+
       if (daysUntil < daysUntilClass) {
         daysUntilClass = daysUntil;
         nextSchedule = schedule;
@@ -1701,7 +1711,7 @@ function StudentHomeScreen() {
             <View style={accountModalStyles.actions}>
               <Pressable 
                 style={[accountModalStyles.btn, accountModalStyles.btnSecondary]}
-                onPress={handleContactWhatsApp}
+                onPress={() => handleContactWhatsApp("Olá! Minha conta anterior foi removida do sistema e preciso de ajuda para continuar meu acesso ao app.")}
               >
                 <Ionicons name="logo-whatsapp" size={18} color="#25D366" />
                 <Text style={accountModalStyles.btnSecondaryText}>Entrar em Contato</Text>
@@ -1749,7 +1759,7 @@ function StudentHomeScreen() {
                 style={[accountModalStyles.btn, accountModalStyles.btnPrimary, { backgroundColor: "#25D366" }]}
                 onPress={() => {
                   handleDismissDeactivation();
-                  handleContactWhatsApp();
+                  handleContactWhatsApp("Olá! Minha matrícula foi desativada e gostaria de saber como posso regularizar ou reativar meu cadastro.");
                 }}
               >
                 <Ionicons name="logo-whatsapp" size={18} color="#fff" />
@@ -1827,13 +1837,13 @@ function StudentHomeScreen() {
 
             {/* Main Grid: Aulas + Avisos lado a lado */}
             <View style={desktopStyles.mainGrid}>
-              {/* Coluna Esquerda: Próximas Aulas */}
+              {/* Coluna Esquerda: Próximas Turmas */}
               <View style={[desktopStyles.classesColumn, { backgroundColor: themeColors.bgCard, borderColor: themeColors.border }]}>
                 <View style={desktopStyles.sectionHeaderRow}>
                   <View style={[desktopStyles.sectionIconBox, { backgroundColor: themeColors.purpleLight }]}>
                     <Ionicons name="calendar" size={18} color={themeColors.purple} />
                   </View>
-                  <Text style={[desktopStyles.sectionTitle, { color: themeColors.text }]}>Próximas Aulas</Text>
+                  <Text style={[desktopStyles.sectionTitle, { color: themeColors.text }]}>Próximas Turmas</Text>
                   <Text style={[desktopStyles.sectionBadge, { backgroundColor: themeColors.purpleLight, color: themeColors.purple }]}>{myClasses.length}</Text>
                 </View>
 
@@ -2126,7 +2136,7 @@ function StudentHomeScreen() {
                               <View style={styles.companionCardBtns}>
                                 <Pressable
                                   style={styles.companionCardBtnWa}
-                                  onPress={() => handleOpenCompanion(event, "invite")}
+                                  onPress={() => handleShareEventWhatsApp(event)}
                                   disabled={!!loadingEventAction}
                                 >
                                   <Ionicons name="logo-whatsapp" size={15} color="#fff" />
@@ -2163,7 +2173,7 @@ function StudentHomeScreen() {
                                 </Pressable>
                                 <Pressable
                                   style={styles.companionCardBtnWa}
-                                  onPress={() => handleOpenCompanion(event, "invite")}
+                                  onPress={() => handleShareEventWhatsApp(event)}
                                   disabled={!!loadingEventAction}
                                 >
                                   <Ionicons name="logo-whatsapp" size={15} color="#fff" />
@@ -2199,7 +2209,7 @@ function StudentHomeScreen() {
                                   </Pressable>
                                   <Pressable
                                     style={styles.companionCardBtnWa}
-                                    onPress={() => handleOpenCompanion(event, "invite")}
+                                    onPress={() => handleShareEventWhatsApp(event)}
                                     disabled={!!loadingEventAction}
                                   >
                                     <Ionicons name="logo-whatsapp" size={15} color="#fff" />
@@ -2343,7 +2353,7 @@ function StudentHomeScreen() {
               <View style={desktopStyles.quickActionsGrid}>
                 <Pressable 
                   style={[desktopStyles.quickActionCard, { backgroundColor: themeColors.bgCard, borderColor: themeColors.border }]}
-                  onPress={() => Linking.openURL(whatsappLink)}
+                  onPress={() => handleContactWhatsApp("Olá! Gostaria de falar com a escola sobre meu perfil e minhas informações no app.")}
                 >
                   <View style={[desktopStyles.quickActionIcon, { backgroundColor: isDark ? "#14532D" : "#DCFCE7" }]}>
                     <Ionicons name="logo-whatsapp" size={22} color="#16A34A" />
@@ -2374,7 +2384,7 @@ function StudentHomeScreen() {
         )}
 
         {/* Mobile Layout - Suas Aulas */}
-        {!isDesktopMode && <SectionHeader title="Suas Aulas" />}
+        {!isDesktopMode && <SectionHeader title="Suas Turmas" />}
 
         {!isDesktopMode && (
           <View style={styles.block}>
@@ -2391,13 +2401,27 @@ function StudentHomeScreen() {
                 </Text>
               </View>
             ) : (
-              myClasses.map((classItem) => (
-                <ClassCard 
-                  key={classItem.id} 
-                  classItem={classItem} 
-                  getNextClassInfo={getNextClassInfo}
-                />
-              ))
+              <>
+                {myClasses.slice(0, 2).map((classItem) => (
+                  <ClassCard
+                    key={classItem.id}
+                    classItem={classItem}
+                    getNextClassInfo={getNextClassInfo}
+                  />
+                ))}
+                {myClasses.length > 2 && (
+                  <Pressable
+                    style={styles.viewAllClassesBtn}
+                    onPress={() => navigation.navigate("Turmas")}
+                  >
+                    <Ionicons name="grid-outline" size={16} color={colors.purple} />
+                    <Text style={styles.viewAllClassesBtnText}>
+                      Ver todas as turmas ({myClasses.length})
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color={colors.purple} />
+                  </Pressable>
+                )}
+              </>
             )}
           </View>
         )}
@@ -2571,7 +2595,7 @@ function StudentHomeScreen() {
                           </Pressable>
                           <Pressable
                             style={styles.companionCardBtnWa}
-                            onPress={() => handleOpenCompanion(event, "invite")}
+                            onPress={() => handleShareEventWhatsApp(event)}
                             disabled={!!loadingEventAction}
                           >
                             <Ionicons name="logo-whatsapp" size={15} color="#fff" />
@@ -2589,7 +2613,7 @@ function StudentHomeScreen() {
                         <View style={styles.companionCardBtns}>
                           <Pressable
                             style={styles.companionCardBtnWa}
-                            onPress={() => handleOpenCompanion(event, "invite")}
+                            onPress={() => handleShareEventWhatsApp(event)}
                             disabled={!!loadingEventAction}
                           >
                             <Ionicons name="logo-whatsapp" size={15} color="#fff" />
@@ -2623,7 +2647,7 @@ function StudentHomeScreen() {
                             </Pressable>
                             <Pressable
                               style={styles.companionCardBtnWa}
-                              onPress={() => handleOpenCompanion(event, "invite")}
+                              onPress={() => handleShareEventWhatsApp(event)}
                               disabled={!!loadingEventAction}
                             >
                               <Ionicons name="logo-whatsapp" size={15} color="#fff" />
@@ -3093,6 +3117,24 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textAlign: "center",
     marginTop: 8,
+  },
+  viewAllClassesBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 8,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    backgroundColor: "#EDE9FE",
+    borderRadius: 12,
+  },
+  viewAllClassesBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.purple,
+    flex: 1,
+    textAlign: "center",
   },
   bottomSpacer: {
     height: 14,

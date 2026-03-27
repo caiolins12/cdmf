@@ -4,6 +4,12 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
+  "crons": [
+    {
+      "path": "/api/cron/check-payments",
+      "schedule": "0 8 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/privacy-policy",

@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { View, StyleSheet, ScrollView, Text, Pressable, ActivityIndicator, RefreshControl } from "react-native";
+import {
+  View, StyleSheet, ScrollView, Text, Pressable,
+  ActivityIndicator, RefreshControl,
+} from "react-native";
 import { Ionicons, FontAwesome5 } from "@/shims/icons";
 import { useFocusEffect } from "@react-navigation/native";
 
-import CdmfHeader from "../../components/CdmfHeader";
-import SectionHeader from "../../components/SectionHeader";
 import { colors } from "../../theme/colors";
 import { useAuth, Class, Profile, AttendanceRecord } from "../../contexts/AuthContext";
 
@@ -20,7 +21,7 @@ type StudentAttendanceStats = {
 
 export default function TeacherReportsScreen() {
   const { profile, fetchClasses, fetchStudents, fetchAttendance } = useAuth();
-  
+
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Profile[]>([]);
   const [selectedClass, setSelectedClass] = useState<Class | null>(null);
@@ -36,13 +37,9 @@ export default function TeacherReportsScreen() {
         fetchClasses(),
         fetchStudents(),
       ]);
-      
-      // Filtra turmas do professor atual
       const myClasses = classesData.filter(c => c.teacherId === profile?.uid && c.active);
-      
       setClasses(myClasses);
       setStudents(studentsData);
-
       if (myClasses.length > 0 && !selectedClass) {
         setSelectedClass(myClasses[0]);
       }
@@ -53,10 +50,8 @@ export default function TeacherReportsScreen() {
     }
   }, [fetchClasses, fetchStudents, profile]);
 
-  // Carrega registros de presença da turma selecionada
   const loadAttendanceRecords = useCallback(async () => {
     if (!selectedClass) return;
-    
     setLoadingAttendance(true);
     try {
       const records = await fetchAttendance(selectedClass.id);
@@ -68,90 +63,64 @@ export default function TeacherReportsScreen() {
     }
   }, [selectedClass, fetchAttendance]);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadData();
-    }, [loadData])
-  );
-
-  useEffect(() => {
-    if (selectedClass) {
-      loadAttendanceRecords();
-    }
-  }, [selectedClass, loadAttendanceRecords]);
+  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+  useEffect(() => { if (selectedClass) loadAttendanceRecords(); }, [selectedClass, loadAttendanceRecords]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await loadData();
-    if (selectedClass) {
-      await loadAttendanceRecords();
-    }
+    if (selectedClass) await loadAttendanceRecords();
     setRefreshing(false);
   };
 
-  // Estatísticas gerais
   const totalClasses = attendanceRecords.length;
-  const totalPresences = attendanceRecords.reduce((acc, r) => acc + r.presentStudentIds.length, 0);
-  const totalAbsences = attendanceRecords.reduce((acc, r) => acc + r.absentStudentIds.length, 0);
+  const totalPresences = attendanceRecords.reduce((a, r) => a + r.presentStudentIds.length, 0);
+  const totalAbsences = attendanceRecords.reduce((a, r) => a + r.absentStudentIds.length, 0);
   const totalStudents = selectedClass?.studentIds?.length || 0;
-  const overallPercentage = totalPresences + totalAbsences > 0 
-    ? Math.round((totalPresences / (totalPresences + totalAbsences)) * 100) 
-    : 0;
+  const overallPct =
+    totalPresences + totalAbsences > 0
+      ? Math.round((totalPresences / (totalPresences + totalAbsences)) * 100)
+      : 0;
 
-  // Estatísticas individuais por aluno
   const getStudentStats = (): StudentAttendanceStats[] => {
     if (!selectedClass) return [];
-    
-    const classStudents = students.filter(s => selectedClass.studentIds?.includes(s.uid));
-    
-    return classStudents.map(student => {
-      let presences = 0;
-      let absences = 0;
-      
-      attendanceRecords.forEach(record => {
-        if (record.presentStudentIds.includes(student.uid)) {
-          presences++;
-        } else if (record.absentStudentIds.includes(student.uid)) {
-          absences++;
-        }
-      });
-      
-      const total = presences + absences;
-      const percentage = total > 0 ? Math.round((presences / total) * 100) : 0;
-      
-      return {
-        student,
-        totalClasses: total,
-        presences,
-        absences,
-        percentage,
-      };
-    }).sort((a, b) => b.percentage - a.percentage);
+    return students
+      .filter(s => selectedClass.studentIds?.includes(s.uid))
+      .map(student => {
+        let presences = 0, absences = 0;
+        attendanceRecords.forEach(r => {
+          if (r.presentStudentIds.includes(student.uid)) presences++;
+          else if (r.absentStudentIds.includes(student.uid)) absences++;
+        });
+        const total = presences + absences;
+        return {
+          student,
+          totalClasses: total,
+          presences,
+          absences,
+          percentage: total > 0 ? Math.round((presences / total) * 100) : 0,
+        };
+      })
+      .sort((a, b) => b.percentage - a.percentage);
   };
 
   const studentStats = getStudentStats();
 
-  // Formata as tags da turma
   const formatClassTags = (classItem: Class): string => {
-    if (!classItem.schedule || classItem.schedule.length === 0) return "";
-    const schedule = classItem.schedule[0];
-    const dayStr = DAYS_SHORT[schedule.dayOfWeek];
-    const timeStr = schedule.startTime;
-    return `${dayStr} | ${timeStr}h`;
+    if (!classItem.schedule?.length) return "";
+    const s = classItem.schedule[0];
+    return `${DAYS_SHORT[s.dayOfWeek]} · ${s.startTime}h`;
   };
 
-  // Cor baseada na porcentagem
-  const getPercentageColor = (percentage: number): string => {
-    if (percentage >= 80) return colors.green;
-    if (percentage >= 60) return "#FFA000";
-    return colors.danger;
-  };
+  const getPctColor = (pct: number) =>
+    pct >= 80 ? colors.green : pct >= 60 ? "#F59E0B" : colors.danger;
 
   if (loading) {
     return (
       <View style={styles.screen}>
-        <CdmfHeader />
-        <SectionHeader title="Relatórios" />
+        <View style={styles.innerHeader}>
+          <Text style={styles.innerHeaderTitle}>Relatórios</Text>
+        </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.purple} />
           <Text style={styles.loadingText}>Carregando...</Text>
@@ -163,11 +132,14 @@ export default function TeacherReportsScreen() {
   if (classes.length === 0) {
     return (
       <View style={styles.screen}>
-        <CdmfHeader />
-        <SectionHeader title="Relatórios" />
+        <View style={styles.innerHeader}>
+          <Text style={styles.innerHeaderTitle}>Relatórios</Text>
+        </View>
         <View style={styles.emptyContainer}>
-          <FontAwesome5 name="chart-bar" size={48} color="#ccc" />
-          <Text style={styles.emptyText}>Você não tem turmas atribuídas</Text>
+          <View style={styles.emptyIconBox}>
+            <FontAwesome5 name="chart-bar" size={32} color="#94A3B8" />
+          </View>
+          <Text style={styles.emptyTitle}>Nenhuma turma atribuída</Text>
           <Text style={styles.emptySubtext}>
             Os relatórios estarão disponíveis quando você tiver turmas
           </Text>
@@ -178,129 +150,114 @@ export default function TeacherReportsScreen() {
 
   return (
     <View style={styles.screen}>
-      <CdmfHeader />
-      <SectionHeader title="Relatórios de Presença" />
+      {/* Header */}
+      <View style={styles.innerHeader}>
+        <Text style={styles.innerHeaderTitle}>Relatórios</Text>
+      </View>
+
+      {/* Class selector */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.classSelector}
+        contentContainerStyle={styles.classSelectorContent}
+      >
+        {classes.map(classItem => {
+          const sel = selectedClass?.id === classItem.id;
+          return (
+            <Pressable
+              key={classItem.id}
+              style={[styles.classTab, sel && styles.classTabSelected]}
+              onPress={() => setSelectedClass(classItem)}
+            >
+              <Text style={[styles.classTabText, sel && styles.classTabTextSelected]}>
+                {classItem.name}
+              </Text>
+              <Text style={[styles.classTabTag, sel && styles.classTabTagSelected]}>
+                {formatClassTags(classItem)}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      {/* View mode toggle */}
+      <View style={styles.toggleWrap}>
+        <Pressable
+          style={[styles.toggleBtn, viewMode === "general" && styles.toggleBtnActive]}
+          onPress={() => setViewMode("general")}
+        >
+          <Ionicons
+            name="stats-chart"
+            size={16}
+            color={viewMode === "general" ? "#fff" : colors.purple}
+          />
+          <Text style={[styles.toggleText, viewMode === "general" && styles.toggleTextActive]}>
+            Geral
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.toggleBtn, viewMode === "individual" && styles.toggleBtnActive]}
+          onPress={() => setViewMode("individual")}
+        >
+          <Ionicons
+            name="people"
+            size={16}
+            color={viewMode === "individual" ? "#fff" : colors.purple}
+          />
+          <Text style={[styles.toggleText, viewMode === "individual" && styles.toggleTextActive]}>
+            Individual
+          </Text>
+        </Pressable>
+      </View>
 
       <ScrollView
+        style={{ flex: 1 }}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.purple]} />
         }
       >
-        {/* Seletor de Turma */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.classSelector}>
-          {classes.map(classItem => (
-            <Pressable
-              key={classItem.id}
-              style={[
-                styles.classTab,
-                selectedClass?.id === classItem.id && styles.classTabSelected,
-              ]}
-              onPress={() => setSelectedClass(classItem)}
-            >
-              <Text style={[
-                styles.classTabText,
-                selectedClass?.id === classItem.id && styles.classTabTextSelected,
-              ]}>
-                {classItem.name}
-              </Text>
-              <Text style={[
-                styles.classTabTag,
-                selectedClass?.id === classItem.id && styles.classTabTagSelected,
-              ]}>
-                {formatClassTags(classItem)}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-
-        {/* Toggle de visualização */}
-        <View style={styles.toggleContainer}>
-          <Pressable
-            style={[styles.toggleBtn, viewMode === "general" && styles.toggleBtnActive]}
-            onPress={() => setViewMode("general")}
-          >
-            <Ionicons 
-              name="stats-chart" 
-              size={18} 
-              color={viewMode === "general" ? "#fff" : colors.purple} 
-            />
-            <Text style={[styles.toggleText, viewMode === "general" && styles.toggleTextActive]}>
-              Geral
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.toggleBtn, viewMode === "individual" && styles.toggleBtnActive]}
-            onPress={() => setViewMode("individual")}
-          >
-            <Ionicons 
-              name="people" 
-              size={18} 
-              color={viewMode === "individual" ? "#fff" : colors.purple} 
-            />
-            <Text style={[styles.toggleText, viewMode === "individual" && styles.toggleTextActive]}>
-              Individual
-            </Text>
-          </Pressable>
-        </View>
-
         {loadingAttendance ? (
           <View style={styles.loadingAttendance}>
             <ActivityIndicator size="small" color={colors.purple} />
             <Text style={styles.loadingText}>Carregando dados...</Text>
           </View>
         ) : viewMode === "general" ? (
-          /* Visão Geral */
-          <View style={styles.generalView}>
-            {/* Card principal de porcentagem */}
-            <View style={styles.mainPercentageCard}>
-              <View style={[styles.percentageCircle, { borderColor: getPercentageColor(overallPercentage) }]}>
-                <Text style={[styles.percentageValue, { color: getPercentageColor(overallPercentage) }]}>
-                  {overallPercentage}%
+          <View style={styles.section}>
+            {/* Percentage circle card */}
+            <View style={styles.pctCard}>
+              <View style={[styles.pctCircle, { borderColor: getPctColor(overallPct) }]}>
+                <Text style={[styles.pctValue, { color: getPctColor(overallPct) }]}>
+                  {overallPct}%
                 </Text>
               </View>
-              <Text style={styles.percentageLabel}>Taxa de Presença Geral</Text>
+              <Text style={styles.pctLabel}>Taxa de Presença Geral</Text>
             </View>
 
-            {/* Grid de estatísticas */}
+            {/* Stats grid */}
             <View style={styles.statsGrid}>
-              <View style={styles.statBox}>
-                <View style={[styles.statIcon, { backgroundColor: "#E3F2FD" }]}>
-                  <Ionicons name="calendar" size={20} color="#1976D2" />
+              {[
+                { icon: "calendar-outline", bg: "#EFF6FF", color: "#3B82F6", val: totalClasses, label: "Aulas\nRegistradas" },
+                { icon: "checkmark-circle-outline", bg: "#DCFCE7", color: colors.green, val: totalPresences, label: "Total de\nPresenças" },
+                { icon: "close-circle-outline", bg: "#FEE2E2", color: colors.danger, val: totalAbsences, label: "Total de\nFaltas" },
+                { icon: "people-outline", bg: "#EDE9FE", color: colors.purple, val: totalStudents, label: "Alunos\nMatriculados" },
+              ].map((item, i) => (
+                <View key={i} style={styles.statBox}>
+                  <View style={[styles.statIcon, { backgroundColor: item.bg }]}>
+                    <Ionicons name={item.icon as any} size={20} color={item.color} />
+                  </View>
+                  <Text style={styles.statValue}>{item.val}</Text>
+                  <Text style={styles.statLabel}>{item.label}</Text>
                 </View>
-                <Text style={styles.statValue}>{totalClasses}</Text>
-                <Text style={styles.statLabel}>Aulas{"\n"}Registradas</Text>
-              </View>
-
-              <View style={styles.statBox}>
-                <View style={[styles.statIcon, { backgroundColor: "#E8F5E9" }]}>
-                  <Ionicons name="checkmark-circle" size={20} color={colors.green} />
-                </View>
-                <Text style={styles.statValue}>{totalPresences}</Text>
-                <Text style={styles.statLabel}>Total de{"\n"}Presenças</Text>
-              </View>
-
-              <View style={styles.statBox}>
-                <View style={[styles.statIcon, { backgroundColor: "#FFEBEE" }]}>
-                  <Ionicons name="close-circle" size={20} color={colors.danger} />
-                </View>
-                <Text style={styles.statValue}>{totalAbsences}</Text>
-                <Text style={styles.statLabel}>Total de{"\n"}Faltas</Text>
-              </View>
-
-              <View style={styles.statBox}>
-                <View style={[styles.statIcon, { backgroundColor: "#F3E5F5" }]}>
-                  <FontAwesome5 name="user-graduate" size={18} color={colors.purple} />
-                </View>
-                <Text style={styles.statValue}>{totalStudents}</Text>
-                <Text style={styles.statLabel}>Alunos{"\n"}Matriculados</Text>
-              </View>
+              ))}
             </View>
 
-            {/* Resumo por aula */}
+            {/* Recent classes */}
             {attendanceRecords.length > 0 && (
-              <View style={styles.recentSection}>
-                <Text style={styles.sectionTitle}>ÚLTIMAS AULAS REGISTRADAS</Text>
-                {attendanceRecords.slice(0, 5).map((record, index) => {
+              <View style={styles.recentCard}>
+                <Text style={styles.sectionLabel}>ÚLTIMAS AULAS REGISTRADAS</Text>
+                {attendanceRecords.slice(0, 5).map((record, idx) => {
                   const date = new Date(record.date + "T12:00:00");
                   const dayOfWeek = DAYS_SHORT[date.getDay()];
                   const dateStr = date.toLocaleDateString("pt-BR");
@@ -308,25 +265,27 @@ export default function TeacherReportsScreen() {
                   const absent = record.absentStudentIds.length;
                   const total = present + absent;
                   const pct = total > 0 ? Math.round((present / total) * 100) : 0;
-                  
                   return (
-                    <View key={record.id || index} style={styles.recentRow}>
-                      <View style={styles.recentDate}>
-                        <Text style={styles.recentDayText}>{dayOfWeek}</Text>
-                        <Text style={styles.recentDateText}>{dateStr}</Text>
+                    <View
+                      key={record.id || idx}
+                      style={[styles.recentRow, idx < 4 && styles.recentRowBorder]}
+                    >
+                      <View style={styles.recentDateBox}>
+                        <Text style={styles.recentDay}>{dayOfWeek}</Text>
+                        <Text style={styles.recentDate}>{dateStr}</Text>
                       </View>
-                      <View style={styles.recentStats}>
-                        <View style={styles.recentStatItem}>
-                          <Ionicons name="checkmark" size={14} color={colors.green} />
-                          <Text style={styles.recentStatText}>{present}</Text>
+                      <View style={styles.recentCounts}>
+                        <View style={styles.recentCountItem}>
+                          <Ionicons name="checkmark" size={13} color={colors.green} />
+                          <Text style={styles.recentCountText}>{present}</Text>
                         </View>
-                        <View style={styles.recentStatItem}>
-                          <Ionicons name="close" size={14} color={colors.danger} />
-                          <Text style={styles.recentStatText}>{absent}</Text>
+                        <View style={styles.recentCountItem}>
+                          <Ionicons name="close" size={13} color={colors.danger} />
+                          <Text style={styles.recentCountText}>{absent}</Text>
                         </View>
                       </View>
-                      <View style={[styles.recentPct, { backgroundColor: getPercentageColor(pct) + "20" }]}>
-                        <Text style={[styles.recentPctText, { color: getPercentageColor(pct) }]}>
+                      <View style={[styles.recentPct, { backgroundColor: getPctColor(pct) + "20" }]}>
+                        <Text style={[styles.recentPctText, { color: getPctColor(pct) }]}>
                           {pct}%
                         </Text>
                       </View>
@@ -337,55 +296,44 @@ export default function TeacherReportsScreen() {
             )}
           </View>
         ) : (
-          /* Visão Individual */
-          <View style={styles.individualView}>
-            <Text style={styles.sectionTitle}>PRESENÇA POR ALUNO</Text>
-            
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>PRESENÇA POR ALUNO</Text>
             {studentStats.length === 0 ? (
-              <View style={styles.noStudentsContainer}>
-                <FontAwesome5 name="user-graduate" size={32} color="#ccc" />
-                <Text style={styles.noStudentsText}>Nenhum aluno nesta turma</Text>
+              <View style={styles.emptyInline}>
+                <FontAwesome5 name="user-graduate" size={32} color="#94A3B8" />
+                <Text style={styles.emptyTitle}>Nenhum aluno nesta turma</Text>
               </View>
             ) : (
-              studentStats.map((stat, index) => (
+              studentStats.map((stat, idx) => (
                 <View key={stat.student.uid} style={styles.studentCard}>
-                  <View style={styles.studentRank}>
-                    <Text style={styles.studentRankText}>{index + 1}º</Text>
+                  <View style={styles.rankBadge}>
+                    <Text style={styles.rankText}>{idx + 1}º</Text>
                   </View>
                   <View style={styles.studentInfo}>
                     <Text style={styles.studentName}>{stat.student.name}</Text>
-                    <View style={styles.studentStatsRow}>
-                      <View style={styles.studentStatItem}>
+                    <View style={styles.studentMeta}>
+                      <View style={styles.metaItem}>
                         <Ionicons name="checkmark-circle" size={12} color={colors.green} />
-                        <Text style={styles.studentStatText}>{stat.presences} presenças</Text>
+                        <Text style={styles.metaText}>{stat.presences} pres.</Text>
                       </View>
-                      <View style={styles.studentStatItem}>
+                      <View style={styles.metaItem}>
                         <Ionicons name="close-circle" size={12} color={colors.danger} />
-                        <Text style={styles.studentStatText}>{stat.absences} faltas</Text>
+                        <Text style={styles.metaText}>{stat.absences} falt.</Text>
                       </View>
                     </View>
                   </View>
-                  <View style={styles.studentPercentage}>
-                    <View style={[
-                      styles.percentageBadge, 
-                      { backgroundColor: getPercentageColor(stat.percentage) + "20" }
-                    ]}>
-                      <Text style={[
-                        styles.percentageBadgeText,
-                        { color: getPercentageColor(stat.percentage) }
-                      ]}>
+                  <View style={styles.studentPct}>
+                    <View style={[styles.pctBadge, { backgroundColor: getPctColor(stat.percentage) + "20" }]}>
+                      <Text style={[styles.pctBadgeText, { color: getPctColor(stat.percentage) }]}>
                         {stat.percentage}%
                       </Text>
                     </View>
                     <View style={styles.progressBar}>
-                      <View 
+                      <View
                         style={[
-                          styles.progressFill, 
-                          { 
-                            width: `${stat.percentage}%`,
-                            backgroundColor: getPercentageColor(stat.percentage),
-                          }
-                        ]} 
+                          styles.progressFill,
+                          { width: `${stat.percentage}%`, backgroundColor: getPctColor(stat.percentage) },
+                        ]}
                       />
                     </View>
                   </View>
@@ -402,7 +350,23 @@ export default function TeacherReportsScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: "#F8FAFC" },
+
+  innerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+  },
+  innerHeaderTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#1E293B",
+  },
 
   loadingContainer: {
     flex: 1,
@@ -410,7 +374,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  loadingText: { color: colors.muted, fontWeight: "600" },
+  loadingText: { color: "#64748B", fontWeight: "600", fontSize: 14 },
 
   emptyContainer: {
     flex: 1,
@@ -418,58 +382,64 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 40,
   },
-  emptyText: {
+  emptyIconBox: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  emptyTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: colors.text,
-    marginTop: 16,
+    color: "#1E293B",
+    marginBottom: 6,
   },
   emptySubtext: {
     fontSize: 14,
-    color: colors.muted,
+    color: "#64748B",
     textAlign: "center",
-    marginTop: 8,
+    lineHeight: 20,
+  },
+  emptyInline: {
+    alignItems: "center",
+    paddingVertical: 40,
+    gap: 12,
   },
 
   classSelector: {
-    maxHeight: 70,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+    maxHeight: 72,
+  },
+  classSelectorContent: {
     paddingHorizontal: 12,
-    paddingTop: 12,
+    paddingVertical: 10,
+    gap: 8,
   },
   classTab: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 16,
-    backgroundColor: "#f5f5f5",
-    marginRight: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "#F1F5F9",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
-  classTabSelected: {
-    backgroundColor: colors.purple,
-  },
-  classTabText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  classTabTextSelected: {
-    color: "#fff",
-  },
-  classTabTag: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: colors.muted,
-    marginTop: 2,
-  },
-  classTabTagSelected: {
-    color: "rgba(255,255,255,0.8)",
-  },
+  classTabSelected: { backgroundColor: colors.purple, borderColor: colors.purple },
+  classTabText: { fontSize: 13, fontWeight: "700", color: "#475569" },
+  classTabTextSelected: { color: "#fff" },
+  classTabTag: { fontSize: 10, fontWeight: "600", color: "#94A3B8", marginTop: 2 },
+  classTabTagSelected: { color: "rgba(255,255,255,0.75)" },
 
-  toggleContainer: {
+  toggleWrap: {
     flexDirection: "row",
-    marginHorizontal: 12,
-    marginTop: 16,
-    backgroundColor: "#F5F5F5",
+    marginHorizontal: 16,
+    marginTop: 14,
+    backgroundColor: "#EDE9FE",
     borderRadius: 12,
     padding: 4,
   },
@@ -482,17 +452,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     gap: 6,
   },
-  toggleBtnActive: {
-    backgroundColor: colors.purple,
-  },
-  toggleText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.purple,
-  },
-  toggleTextActive: {
-    color: "#fff",
-  },
+  toggleBtnActive: { backgroundColor: colors.purple },
+  toggleText: { fontSize: 13, fontWeight: "700", color: colors.purple },
+  toggleTextActive: { color: "#fff" },
 
   loadingAttendance: {
     flexDirection: "row",
@@ -502,23 +464,30 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  /* General View */
-  generalView: {
-    padding: 12,
+  section: { padding: 16 },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#94A3B8",
+    letterSpacing: 0.5,
+    marginBottom: 12,
   },
-  mainPercentageCard: {
+
+  pctCard: {
     backgroundColor: "#fff",
     borderRadius: 20,
     padding: 24,
     alignItems: "center",
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#64748B",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  percentageCircle: {
+  pctCircle: {
     width: 120,
     height: 120,
     borderRadius: 60,
@@ -527,21 +496,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 12,
   },
-  percentageValue: {
-    fontSize: 36,
-    fontWeight: "900",
-  },
-  percentageLabel: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.muted,
-  },
+  pctValue: { fontSize: 36, fontWeight: "900" },
+  pctLabel: { fontSize: 14, fontWeight: "700", color: "#64748B" },
 
   statsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   statBox: {
     flex: 1,
@@ -550,180 +512,105 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     alignItems: "center",
-    shadowColor: "#000",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#64748B",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
   },
   statIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
   },
-  statValue: {
-    fontSize: 24,
-    fontWeight: "900",
-    color: colors.text,
-  },
+  statValue: { fontSize: 24, fontWeight: "900", color: "#1E293B" },
   statLabel: {
     fontSize: 11,
     fontWeight: "600",
-    color: colors.muted,
+    color: "#64748B",
     textAlign: "center",
     marginTop: 4,
   },
 
-  recentSection: {
+  recentCard: {
     backgroundColor: "#fff",
     borderRadius: 14,
-    padding: 14,
-  },
-  sectionTitle: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: colors.muted,
-    letterSpacing: 0.5,
-    marginBottom: 12,
-    paddingHorizontal: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
   recentRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 10,
+  },
+  recentRowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
+    borderBottomColor: "#F1F5F9",
   },
-  recentDate: {
-    flex: 1,
-  },
-  recentDayText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.purple,
-  },
-  recentDateText: {
-    fontSize: 11,
-    color: colors.muted,
-    marginTop: 2,
-  },
-  recentStats: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  recentStatItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  recentStatText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.text,
-  },
+  recentDateBox: { flex: 1 },
+  recentDay: { fontSize: 12, fontWeight: "800", color: colors.purple },
+  recentDate: { fontSize: 11, color: "#64748B", marginTop: 2 },
+  recentCounts: { flexDirection: "row", gap: 12 },
+  recentCountItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  recentCountText: { fontSize: 13, fontWeight: "700", color: "#1E293B" },
   recentPct: {
     marginLeft: 12,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
   },
-  recentPctText: {
-    fontSize: 12,
-    fontWeight: "800",
-  },
+  recentPctText: { fontSize: 12, fontWeight: "800" },
 
-  /* Individual View */
-  individualView: {
-    padding: 12,
-  },
-  noStudentsContainer: {
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  noStudentsText: {
-    fontSize: 14,
-    color: colors.muted,
-    marginTop: 12,
-  },
   studentCard: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#fff",
     borderRadius: 14,
     padding: 14,
-    marginBottom: 10,
-    shadowColor: "#000",
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#64748B",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
   },
-  studentRank: {
+  rankBadge: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: "#F3E5F5",
+    borderRadius: 10,
+    backgroundColor: "#EDE9FE",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
   },
-  studentRankText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.purple,
-  },
-  studentInfo: {
-    flex: 1,
-  },
-  studentName: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  studentStatsRow: {
-    flexDirection: "row",
-    marginTop: 4,
-    gap: 12,
-  },
-  studentStatItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  studentStatText: {
-    fontSize: 11,
-    color: colors.muted,
-    fontWeight: "600",
-  },
-  studentPercentage: {
-    alignItems: "flex-end",
-    width: 70,
-  },
-  percentageBadge: {
+  rankText: { fontSize: 12, fontWeight: "800", color: colors.purple },
+  studentInfo: { flex: 1 },
+  studentName: { fontSize: 14, fontWeight: "700", color: "#1E293B" },
+  studentMeta: { flexDirection: "row", gap: 12, marginTop: 4 },
+  metaItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  metaText: { fontSize: 11, color: "#64748B", fontWeight: "600" },
+  studentPct: { alignItems: "flex-end", width: 70 },
+  pctBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
     marginBottom: 6,
   },
-  percentageBadgeText: {
-    fontSize: 13,
-    fontWeight: "800",
-  },
+  pctBadgeText: { fontSize: 13, fontWeight: "800" },
   progressBar: {
     width: "100%",
     height: 4,
-    backgroundColor: "#E0E0E0",
+    backgroundColor: "#E2E8F0",
     borderRadius: 2,
     overflow: "hidden",
   },
-  progressFill: {
-    height: "100%",
-    borderRadius: 2,
-  },
+  progressFill: { height: "100%", borderRadius: 2 },
 });
-
-
-

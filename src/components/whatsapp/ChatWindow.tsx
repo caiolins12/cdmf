@@ -7,6 +7,7 @@ import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, ActivityIndic
 import { Ionicons } from "@/shims/icons";
 import { colors } from "../../theme/colors";
 import { Conversation, Message, WhatsAppService } from "../../services/WhatsAppService";
+import { showConfirm } from "../../utils/alert";
 
 interface ChatWindowProps {
     conversation: Conversation | null;
@@ -15,6 +16,7 @@ interface ChatWindowProps {
     onSendMessage: (message: string) => Promise<void>;
     onMarkResolved: () => void;
     onDeleteConversation?: (conversationId: string) => void;
+    onDisableBot?: () => void;
 }
 
 export default function ChatWindow({
@@ -24,6 +26,7 @@ export default function ChatWindow({
     onSendMessage,
     onMarkResolved,
     onDeleteConversation,
+    onDisableBot,
 }: ChatWindowProps) {
     const [inputText, setInputText] = useState("");
     const [sending, setSending] = useState(false);
@@ -139,40 +142,67 @@ export default function ChatWindow({
         >
             {/* Header */}
             <View style={styles.header}>
-                <View style={styles.headerInfo}>
-                    <View style={styles.headerAvatar}>
-                        <Text style={styles.headerAvatarText}>{conversation.studentName.charAt(0).toUpperCase()}</Text>
+                {/* Linha 1: Identidade + lixeira */}
+                <View style={styles.headerRow}>
+                    <View style={styles.headerInfo}>
+                        <View style={styles.headerAvatar}>
+                            <Text style={styles.headerAvatarText}>{conversation.studentName.charAt(0).toUpperCase()}</Text>
+                        </View>
+                        <View style={styles.headerTextWrap}>
+                            <Text style={styles.headerName} numberOfLines={1}>{conversation.studentName}</Text>
+                            <Text style={styles.headerPhone} numberOfLines={1}>{formatPhoneNumber(conversation.studentPhone)}</Text>
+                        </View>
                     </View>
-                    <View>
-                        <Text style={styles.headerName}>{conversation.studentName}</Text>
-                        <Text style={styles.headerPhone}>{formatPhoneNumber(conversation.studentPhone)}</Text>
-                    </View>
+                    {onDeleteConversation && (
+                        <Pressable
+                            style={styles.deleteBtn}
+                            onPress={() => showConfirm(
+                                "Apagar conversa",
+                                "Deseja apagar esta conversa? Esta ação não pode ser desfeita.",
+                                () => onDeleteConversation(conversation.id)
+                            )}
+                        >
+                            <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                        </Pressable>
+                    )}
                 </View>
 
+                {/* Linha 2: Ações do atendimento */}
                 <View style={styles.headerActions}>
+                    {conversation.botPhase === "active" && (
+                        <View style={styles.botActiveBadge}>
+                            <Text style={styles.botBadgeText}>🤖 Bot ativo</Text>
+                        </View>
+                    )}
+                    {conversation.botPhase === "disabled" && (
+                        <View style={styles.botDisabledBadge}>
+                            <Text style={styles.botDisabledText}>🤖 Bot pausado</Text>
+                        </View>
+                    )}
+                    {conversation.botPhase === "active" && onDisableBot && (
+                        <Pressable
+                            style={styles.takeOverBtn}
+                            onPress={() => showConfirm(
+                                "Assumir atendimento",
+                                "O bot será pausado e você poderá responder manualmente. O bot voltará a funcionar após a conversa ser resolvida.",
+                                () => onDisableBot()
+                            )}
+                        >
+                            <Ionicons name="person-outline" size={14} color="#7C3AED" />
+                            <Text style={styles.takeOverBtnText}>Assumir</Text>
+                        </Pressable>
+                    )}
                     {conversation.status === "open" && (
                         <Pressable style={styles.resolveBtn} onPress={onMarkResolved}>
-                            <Ionicons name="checkmark-circle-outline" size={18} color={colors.green} />
+                            <Ionicons name="checkmark-circle-outline" size={16} color={colors.green} />
                             <Text style={styles.resolveBtnText}>Resolver</Text>
                         </Pressable>
                     )}
                     {conversation.status === "resolved" && (
                         <View style={styles.resolvedBadge}>
-                            <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                            <Ionicons name="checkmark-circle" size={13} color="#10B981" />
                             <Text style={styles.resolvedText}>Resolvido</Text>
                         </View>
-                    )}
-                    {onDeleteConversation && (
-                        <Pressable
-                            style={styles.deleteBtn}
-                            onPress={() => {
-                                if (confirm("Deseja apagar esta conversa? Esta ação não pode ser desfeita.")) {
-                                    onDeleteConversation(conversation.id);
-                                }
-                            }}
-                        >
-                            <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                        </Pressable>
                     )}
                 </View>
             </View>
@@ -312,56 +342,71 @@ const styles = StyleSheet.create({
         marginTop: 8,
     },
     header: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: 16,
+        flexDirection: "column",
+        paddingHorizontal: 14,
+        paddingTop: 12,
+        paddingBottom: 8,
         backgroundColor: "#FFFFFF",
         borderBottomWidth: 1,
         borderBottomColor: "#E2E8F0",
+        gap: 8,
+    },
+    headerRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
     },
     headerInfo: {
         flexDirection: "row",
         alignItems: "center",
+        flex: 1,
+        minWidth: 0,
+    },
+    headerTextWrap: {
+        flex: 1,
+        minWidth: 0,
     },
     headerAvatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         backgroundColor: colors.purple,
         alignItems: "center",
         justifyContent: "center",
-        marginRight: 12,
+        marginRight: 10,
+        flexShrink: 0,
     },
     headerAvatarText: {
         color: "#FFFFFF",
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: "700",
     },
     headerName: {
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: "600",
         color: "#1E293B",
     },
     headerPhone: {
-        fontSize: 13,
+        fontSize: 12,
         color: "#64748B",
     },
     headerActions: {
         flexDirection: "row",
         alignItems: "center",
+        flexWrap: "wrap",
+        gap: 6,
     },
     resolveBtn: {
         flexDirection: "row",
         alignItems: "center",
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 16,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 14,
         backgroundColor: colors.green + "15",
         gap: 4,
     },
     resolveBtnText: {
-        fontSize: 13,
+        fontSize: 12,
         fontWeight: "600",
         color: colors.green,
     },
@@ -380,10 +425,46 @@ const styles = StyleSheet.create({
         fontWeight: "500",
     },
     deleteBtn: {
-        padding: 8,
-        marginLeft: 8,
+        padding: 7,
         borderRadius: 8,
         backgroundColor: "#FEF2F2",
+        flexShrink: 0,
+    },
+    botActiveBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        backgroundColor: "#EDE9FE",
+    },
+    botBadgeText: {
+        fontSize: 11,
+        color: "#7C3AED",
+        fontWeight: "600",
+    },
+    botDisabledBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        backgroundColor: "#F1F5F9",
+    },
+    botDisabledText: {
+        fontSize: 11,
+        color: "#64748B",
+        fontWeight: "600",
+    },
+    takeOverBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 14,
+        backgroundColor: "#EDE9FE",
+        gap: 4,
+    },
+    takeOverBtnText: {
+        fontSize: 12,
+        fontWeight: "600",
+        color: "#7C3AED",
     },
     messagesContainer: {
         flex: 1,

@@ -18,10 +18,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "react-native": ["./node_modules/react-native-web"],
-      "firebase/app": ["src/services/appCompat"],
-      "firebase/functions": ["src/services/functionsCompat"],
-      "firebase/firestore": ["src/services/postgresFirestoreCompat"]
+      "react-native": ["./node_modules/react-native-web"]
     }
   },
   "include": ["App.tsx", "index.ts", "src", "api", "server", "vite.config.ts"]

@@ -9,7 +9,7 @@
  */
 
 import { Invoice } from "../contexts/PaymentContext";
-import { getFunctions, httpsCallable, Functions } from "firebase/functions";
+import { getFunctions, httpsCallable, Functions } from "./functionsCompat";
 import { app } from "./firebase";
 
 // Flag para usar Mercado Pago (Cloud Functions configuradas!)

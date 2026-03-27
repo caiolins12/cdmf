@@ -18,6 +18,7 @@ export interface Conversation {
   status: "open" | "resolved";
   createdAt: number;
   updatedAt: number;
+  botPhase?: "active" | "completed" | "disabled";
 }
 
 export interface Message {
@@ -354,6 +355,10 @@ export const WhatsAppService = {
     }
   },
 
+  async setBotPhase(conversationId: string, phase: "active" | "completed" | "disabled"): Promise<void> {
+    await rpc("setChatbotPhase", { conversationId, phase });
+  },
+
   // ===============================
   // TEMPLATES
   // ===============================
@@ -417,12 +422,13 @@ export const WhatsAppService = {
     templateId: string,
     audience: WhatsAppAudience,
     variables?: Record<string, string>,
-    imageUrl?: string
+    imageUrl?: string,
+    customContent?: string
   ): Promise<{ count: number; failed?: number; errors?: string[] }> {
     try {
       const result = await rpc<{ count: number; failed?: number; errors?: string[] }>(
         "sendWhatsAppMessage",
-        { templateId, audience, variables, imageUrl }
+        { templateId, audience, variables, imageUrl, customContent }
       );
       return {
         count: result.count,

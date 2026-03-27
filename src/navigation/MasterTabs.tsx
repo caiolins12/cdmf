@@ -26,6 +26,9 @@ const MasterEventsScreen = createLazyScreen(
 const MasterCommunicationsScreen = createLazyScreen(
   () => import("../screens/master/MasterCommunicationsScreen")
 );
+const MasterSettingsScreen = createLazyScreen(
+  () => import("../screens/master/MasterSettingsScreen")
+);
 
 export type MasterTabParamList = {
   Inicio: undefined;
@@ -35,6 +38,7 @@ export type MasterTabParamList = {
   Financeiro: undefined;
   Eventos: undefined;
   Comunicacoes: undefined;
+  Configuracoes: undefined;
 };
 
 const Stack = createNativeStackNavigator<MasterTabParamList>();
@@ -63,6 +67,7 @@ export default function MasterTabs() {
       <Stack.Screen name="Financeiro" component={MasterFinanceScreen} />
       <Stack.Screen name="Eventos" component={MasterEventsScreen} />
       <Stack.Screen name="Comunicacoes" component={MasterCommunicationsScreen} />
+      <Stack.Screen name="Configuracoes" component={MasterSettingsScreen} />
     </Stack.Navigator>
   );
 }

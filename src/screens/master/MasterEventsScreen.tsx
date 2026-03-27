@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { View, StyleSheet, ScrollView, TextInput, Text, RefreshControl, Pressable, Modal, ActivityIndicator } from "react-native";
+import { View, StyleSheet, ScrollView, TextInput, Text, RefreshControl, Pressable, Modal, ActivityIndicator, Linking } from "react-native";
 import { showAlert, showConfirm } from "../../utils/alert";
 import { Ionicons, FontAwesome5 } from "@/shims/icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot } from "../../services/postgresFirestoreCompat";
 import { db } from "../../services/firebase";
 
 import CdmfHeader from "../../components/CdmfHeader";
@@ -462,6 +462,25 @@ export default function MasterEventsScreen() {
     setShowInviteModal(true);
   };
 
+  const handleWhatsAppInvite = (event: Event) => {
+    const eventEmojis: Record<string, string> = {
+      baile: "💃",
+      workshop: "🎓",
+      show: "🎤",
+      festa: "🎉",
+      aula: "🕺",
+    };
+    const emoji = eventEmojis[event.type] || "🎉";
+    const message =
+      `Oi, gostaria de convidar você para o ${event.name}. ${emoji}\n` +
+      `Basta acessar o link e confirmar sua participação:\n` +
+      `https://cdmf.vercel.app/`;
+    const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    Linking.openURL(url).catch(() =>
+      showAlert("Erro", "Não foi possível abrir o WhatsApp. Verifique se ele está instalado.")
+    );
+  };
+
   const handleConfirmSendInvites = async () => {
     console.log("[Event] ===== BOTÃO CLICADO =====");
     console.log("[Event] Estado atual:", {
@@ -768,10 +787,18 @@ export default function MasterEventsScreen() {
             }}
             activeOpacity={1}
           >
-            <View style={{ flex: 1 }}>
-              <Text style={styles.modalTitle}>Novo Evento</Text>
+            <View style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Novo Evento</Text>
+                <Text style={styles.modalSubtitle}>Preencha os dados abaixo e revise as ações no rodapé.</Text>
+              </View>
 
-              <View style={styles.modalScrollContent}>
+              <ScrollView
+                style={styles.modalBodyScroll}
+                contentContainerStyle={styles.modalScrollContent}
+                showsVerticalScrollIndicator={true}
+                keyboardShouldPersistTaps="handled"
+              >
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>Nome do Evento *</Text>
                   <TextInput
@@ -929,12 +956,12 @@ export default function MasterEventsScreen() {
                     onChangeText={setNewDescription}
                     placeholder="Detalhes sobre o evento..."
                     placeholderTextColor="#999"
-                    style={[styles.modalInput, { height: 64, textAlignVertical: "top" }]}
+                    style={[styles.modalInput, styles.modalTextArea]}
                     multiline
                     editable={!creating}
                   />
                 </View>
-              </View>
+              </ScrollView>
 
               <View style={styles.modalActions}>
                 <Pressable
@@ -973,13 +1000,17 @@ export default function MasterEventsScreen() {
       <Modal visible={showEditModal} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => !editing && setShowEditModal(false)}>
           <View style={styles.createModal}>
-            <Pressable onPress={(e) => e.stopPropagation()} style={{ flex: 1 }}>
-              <Text style={styles.modalTitle}>Editar Evento</Text>
+            <Pressable onPress={(e) => e.stopPropagation()} style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Editar Evento</Text>
+                <Text style={styles.modalSubtitle}>Atualize os dados e revise o estado do evento antes de salvar.</Text>
+              </View>
 
               <ScrollView 
-                style={{ flex: 1 }}
+                style={styles.modalBodyScroll}
                 contentContainerStyle={styles.modalScrollContent}
                 showsVerticalScrollIndicator={true}
+                keyboardShouldPersistTaps="handled"
               >
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>Nome do Evento *</Text>
@@ -1032,7 +1063,7 @@ export default function MasterEventsScreen() {
                     onChangeText={setEditDescription}
                     placeholder="Detalhes sobre o evento..."
                     placeholderTextColor="#999"
-                    style={[styles.modalInput, { height: 80, textAlignVertical: "top" }]}
+                    style={[styles.modalInput, styles.modalTextArea]}
                     multiline
                     editable={!editing}
                   />
@@ -1624,12 +1655,12 @@ export default function MasterEventsScreen() {
 
                   <View style={styles.eventActions}>
                     <View style={styles.actionButtonsRow}>
-                      <Pressable 
-                        style={styles.actionButton} 
-                        onPress={() => handleSendInvitations(event)}
+                      <Pressable
+                        style={[styles.actionButton, styles.actionButtonWhatsApp]}
+                        onPress={() => handleWhatsAppInvite(event)}
                       >
-                        <Ionicons name="mail" size={16} color={colors.purple} />
-                        <Text style={styles.actionButtonText}>Convites</Text>
+                        <FontAwesome5 name="whatsapp" size={16} color="#25D366" />
+                        <Text style={[styles.actionButtonText, { color: "#25D366" }]}>Convidar</Text>
                       </Pressable>
                       <Pressable 
                         style={styles.actionButton} 
@@ -1942,6 +1973,9 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  actionButtonWhatsApp: {
+    backgroundColor: "#F0FDF4",
+  },
   actionButtonText: {
     fontSize: 11,
     fontWeight: "700",
@@ -2015,18 +2049,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 16,
   },
+  modalContainer: {
+    flex: 1,
+  },
+  modalBodyScroll: {
+    flex: 1,
+  },
   modalScrollContent: {
     paddingBottom: 8,
   },
   modalRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 12,
-    alignItems: "flex-start",
+    alignItems: "stretch",
   },
   createModal: {
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 18,
     width: "100%",
     maxWidth: 520,
     maxHeight: "92%",
@@ -2038,14 +2081,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1E293B",
     textAlign: "center",
-    marginBottom: 20,
+    marginBottom: 6,
   },
   modalSubtitle: {
     fontSize: 14,
     color: colors.muted,
     textAlign: "center",
-    marginTop: -12,
-    marginBottom: 16,
+    lineHeight: 20,
   },
   modalHeader: {
     marginBottom: 16,
@@ -2066,6 +2108,10 @@ const styles = StyleSheet.create({
     color: colors.text,
     borderWidth: 1,
     borderColor: "#E2E8F0",
+  },
+  modalTextArea: {
+    minHeight: 84,
+    textAlignVertical: "top",
   },
   typeRow: {
     flexDirection: "row",
@@ -2143,12 +2189,15 @@ const styles = StyleSheet.create({
   },
   modalActions: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 10,
-    marginTop: 10,
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
   },
   cancelBtn: {
-    minWidth: 120,
+    flex: 1,
+    minWidth: 0,
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 12,
@@ -2163,7 +2212,8 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   createBtn: {
-    minWidth: 140,
+    flex: 1,
+    minWidth: 0,
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 12,

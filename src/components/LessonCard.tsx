@@ -1,9 +1,9 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, Pressable, Image, Modal } from "react-native";
-import { showAlert } from "../utils/alert";
+import { View, Text, StyleSheet, Pressable, Image, Modal, Linking } from "react-native";
 import { Ionicons } from "@/shims/icons";
 import { colors } from "../theme/colors";
 import { useDesktop } from "../contexts/DesktopContext";
+import { useWhatsAppContact } from "../utils/whatsapp";
 
 // Mapeamento de estilos de dança para ícones
 // dance_ico1 = Forró
@@ -51,24 +51,20 @@ const DANCE_ICONS: Record<string, any> = {
   "default": { uri: new URL("../../assets/dance_ico1.png", import.meta.url).href },
 };
 
-// Função para obter o ícone baseado no nome da aula
 const getDanceIcon = (lessonName: string) => {
   const normalizedName = lessonName.toLowerCase().trim();
   
-  // Procura correspondência exata primeiro
   if (DANCE_ICONS[normalizedName]) {
     return DANCE_ICONS[normalizedName];
   }
   
-  // Procura correspondência parcial
   for (const key of Object.keys(DANCE_ICONS)) {
     if (normalizedName.includes(key) || key.includes(normalizedName)) {
       return DANCE_ICONS[key];
     }
   }
   
-  // Retorna ícone padrão
-  return DANCE_ICONS["default"];
+  return DANCE_ICONS.default;
 };
 
 type Props = {
@@ -84,40 +80,34 @@ type Props = {
 export default function LessonCard({ teacher, lesson, date, time, dayLabel, onPress, showContactOptions = true }: Props) {
   const [showOptionsModal, setShowOptionsModal] = useState(false);
   const { isDesktopMode } = useDesktop();
+  const { buildUrl } = useWhatsAppContact();
   
   const isToday = dayLabel === "HOJE";
   const isTomorrow = dayLabel === "AMANHÃ";
   const danceIcon = getDanceIcon(lesson);
+  const scheduleDetails = [dayLabel, date, time ? `${time}h` : ""].filter(Boolean).join(" • ");
 
-  // Funções de contato (preparadas para WhatsApp)
+  const openContact = (message: string) => {
+    Linking.openURL(buildUrl(message));
+  };
+
   const handleCantAttend = () => {
     setShowOptionsModal(false);
-    // TODO: Redirecionar para WhatsApp com mensagem pronta
-    // Linking.openURL(`whatsapp://send?phone=5511999999999&text=Olá, não vou poder comparecer à aula de ${lesson} no dia ${date} às ${time}h.`);
-    showAlert(
-      "Função em desenvolvimento",
-      `Esta opção irá enviar uma mensagem via WhatsApp informando que você não poderá comparecer à aula de ${lesson}.`
+    openContact(
+      `Olá! Não vou conseguir comparecer à aula de ${lesson}${scheduleDetails ? ` (${scheduleDetails})` : ""}. Pode registrar minha falta, por favor?`
     );
   };
 
   const handleTalkToTeacher = () => {
     setShowOptionsModal(false);
-    // TODO: Redirecionar para WhatsApp com mensagem pronta
-    // Linking.openURL(`whatsapp://send?phone=5511999999999&text=Olá Professor ${teacher}, gostaria de falar sobre a aula de ${lesson}.`);
-    showAlert(
-      "Função em desenvolvimento",
-      `Esta opção irá abrir uma conversa no WhatsApp com o Professor ${teacher}.`
+    openContact(
+      `Olá! Gostaria de falar sobre a aula de ${lesson}${teacher ? ` com o professor ${teacher}` : ""}.`
     );
   };
 
   const handleRequestLeave = () => {
     setShowOptionsModal(false);
-    // TODO: Redirecionar para WhatsApp com mensagem pronta
-    // Linking.openURL(`whatsapp://send?phone=5511999999999&text=Olá, gostaria de solicitar minha saída da turma de ${lesson}.`);
-    showAlert(
-      "Função em desenvolvimento",
-      `Esta opção irá enviar uma solicitação de saída da turma de ${lesson} via WhatsApp.`
-    );
+    openContact(`Olá! Gostaria de solicitar minha saída da turma de ${lesson}. Podemos conversar sobre isso?`);
   };
 
   const handleCardPress = () => {
@@ -131,17 +121,14 @@ export default function LessonCard({ teacher, lesson, date, time, dayLabel, onPr
   return (
     <>
       <Pressable onPress={handleCardPress} style={[styles.card, isDesktopMode && styles.cardDesktop]}>
-        {/* Ícone da dança */}
-        <View style={[
-          styles.iconContainer,
-          isToday && styles.iconContainerToday,
-          isTomorrow && styles.iconContainerTomorrow,
-        ]}>
-          <Image 
-            source={danceIcon} 
-            style={styles.danceIcon}
-            resizeMode="cover"
-          />
+        <View
+          style={[
+            styles.iconContainer,
+            isToday && styles.iconContainerToday,
+            isTomorrow && styles.iconContainerTomorrow,
+          ]}
+        >
+          <Image source={danceIcon} style={styles.danceIcon} resizeMode="cover" />
         </View>
 
         <View style={styles.infoContainer}>
@@ -149,33 +136,33 @@ export default function LessonCard({ teacher, lesson, date, time, dayLabel, onPr
           <Text style={styles.teacherName}>Prof. {teacher}</Text>
           
           <View style={styles.scheduleRow}>
-            <View style={[
-              styles.dayBadge,
-              isToday && styles.dayBadgeToday,
-              isTomorrow && styles.dayBadgeTomorrow,
-            ]}>
-              <Text style={styles.dayBadgeText}>
-                {dayLabel || "Próxima"}
-              </Text>
+            <View
+              style={[
+                styles.dayBadge,
+                isToday && styles.dayBadgeToday,
+                isTomorrow && styles.dayBadgeTomorrow,
+              ]}
+            >
+              <Text style={styles.dayBadgeText}>{dayLabel || "Próxima"}</Text>
             </View>
-            <Text style={styles.timeText}>{time}h</Text>
-            <Text style={styles.dateText}>• {date}</Text>
+            {!!time && <Text style={styles.timeText}>{time}h</Text>}
+            {!!date && <Text style={styles.dateText}>{time ? "• " : ""}{date}</Text>}
           </View>
         </View>
 
-        {/* Indicador de que pode clicar */}
         {showContactOptions && (
           <Ionicons name="chevron-forward" size={20} color="rgba(0,0,0,0.3)" />
         )}
       </Pressable>
 
-      {/* Modal de opções de contato */}
       <Modal visible={showOptionsModal} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setShowOptionsModal(false)}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{lesson}</Text>
-              <Text style={styles.modalSubtitle}>Prof. {teacher} • {dayLabel} às {time}h</Text>
+              <Text style={styles.modalSubtitle}>
+                Prof. {teacher}{dayLabel ? ` • ${dayLabel}` : ""}{time ? ` às ${time}h` : ""}{date ? ` · ${date}` : ""}
+              </Text>
             </View>
 
             <Pressable style={styles.optionButton} onPress={handleCantAttend}>
@@ -303,7 +290,6 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
 
-  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -375,5 +361,3 @@ const styles = StyleSheet.create({
     color: "#555",
   },
 });
-
-

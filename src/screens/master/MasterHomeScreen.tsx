@@ -40,24 +40,6 @@ const AnimatedStatCard = React.memo(function AnimatedStatCard({ count, label, on
   );
 });
 
-// Botão de logout animado (Mobile)
-function AnimatedLogoutButton({ onPress }: { onPress: () => void }) {
-  const { pressAnim, onPressIn, onPressOut } = usePressAnimation();
-  
-  return (
-    <Animated.View style={{ transform: [{ scale: pressAnim }] }}>
-      <Pressable 
-        onPress={onPress} 
-        style={styles.logoutBtn}
-        onPressIn={onPressIn}
-        onPressOut={onPressOut}
-      >
-        <Ionicons name="log-out-outline" size={20} color={colors.danger} />
-        <Text style={styles.logout}>Sair da Conta</Text>
-      </Pressable>
-    </Animated.View>
-  );
-}
 
 // ==================== COMPONENTES DESKTOP ====================
 
@@ -138,7 +120,7 @@ function DesktopActionCard({
 // ==================== COMPONENTE PRINCIPAL ====================
 
 export default function MasterHomeScreen() {
-  const { signOut, profile, user, fetchStudents, fetchTeachers, fetchClasses } = useAuth();
+  const { profile, user, fetchStudents, fetchTeachers, fetchClasses } = useAuth();
   const { isDesktopMode } = useDesktop();
   const { getFinancialSummary } = usePayment();
   const { activities, loading: activitiesLoading, clearAllActivities } = useActivity();
@@ -560,12 +542,6 @@ export default function MasterHomeScreen() {
           )}
         </View>
 
-        {/* Footer */}
-        <View style={styles.mobileFooter}>
-          <Text style={styles.mobileVersion}>CDMF v1.0.0</Text>
-          <AnimatedLogoutButton onPress={signOut} />
-        </View>
-
         <View style={{ height: 30 }} />
       </ScrollView>
     </View>
@@ -761,25 +737,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#F1F5F9",
   },
 
-  // Footer
-  mobileFooter: {
-    alignItems: "center",
-    paddingTop: 10,
-  },
-  mobileVersion: {
-    fontSize: 11,
-    color: "#94A3B8",
-    marginBottom: 10,
-  },
-  
-  logoutBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 10,
-  },
-  logout: { textAlign: "center", color: colors.danger, fontWeight: "900", fontSize: 14 },
 });
 
 // ==================== ESTILOS DESKTOP ====================

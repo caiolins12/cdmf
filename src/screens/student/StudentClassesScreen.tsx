@@ -12,12 +12,12 @@ import { colors } from "../../theme/colors";
 import { useAuth, Class } from "../../contexts/AuthContext";
 import { useDesktop } from "../../contexts/DesktopContext";
 import { useTheme } from "../../contexts/ThemeContext";
+import { useWhatsAppContact } from "../../utils/whatsapp";
 
 const DAYS_OF_WEEK = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 const DAYS_OF_WEEK_SHORT = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
 
-// Número de WhatsApp (trocar pelo real)
-const WHATSAPP_NUMBER = "5500000000000";
+
 
 // Mapeamento de estilos de dança para ícones (mesmo do LessonCard)
 const DANCE_ICONS: Record<string, any> = {
@@ -82,6 +82,7 @@ const getDanceIcon = (lessonName: string) => {
 
 export default function StudentClassesScreen() {
   const { profile, fetchClasses } = useAuth();
+  const { buildUrl: buildWhatsAppUrl } = useWhatsAppContact();
   const { isDesktopMode } = useDesktop();
   const { colors: themeColors, isDark } = useTheme();
   const [myClasses, setMyClasses] = useState<Class[]>([]);
@@ -91,26 +92,26 @@ export default function StudentClassesScreen() {
   // Modal de opções da aula (desktop)
   const [selectedClass, setSelectedClass] = useState<Class | null>(null);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const openWhatsApp = (message: string) => {
+    Linking.openURL(buildWhatsAppUrl(message));
+  };
 
   // Funções do menu contextual
   const handleCantAttend = (classItem: Class) => {
     const message = `Olá, não vou poder comparecer à aula de ${classItem.name}. Por favor, registre minha falta.`;
-    const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
-    Linking.openURL(url);
+    openWhatsApp(message);
     setShowOptionsModal(false);
   };
 
   const handleTalkToTeacher = (classItem: Class) => {
     const message = `Olá Professor ${classItem.teacherName || ""}, gostaria de falar sobre a aula de ${classItem.name}.`;
-    const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
-    Linking.openURL(url);
+    openWhatsApp(message);
     setShowOptionsModal(false);
   };
 
   const handleRequestLeave = (classItem: Class) => {
     const message = `Olá, gostaria de solicitar minha saída da turma de ${classItem.name}. Podemos conversar sobre isso?`;
-    const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
-    Linking.openURL(url);
+    openWhatsApp(message);
     setShowOptionsModal(false);
   };
 
@@ -216,8 +217,7 @@ export default function StudentClassesScreen() {
     };
   };
 
-  // Depois você troca pelo número/links reais do CDMF
-  const whatsappLink = "https://wa.me/5500000000000";
+  // Link de WhatsApp dinâmico baseado nas configurações
   const instagramLink = "https://instagram.com";
 
   // Desktop Layout
@@ -306,7 +306,7 @@ export default function StudentClassesScreen() {
                 <Ionicons name="calendar" size={24} color={themeColors.purple} />
               </View>
               <View style={desktopStyles.headerContent}>
-                <Text style={[desktopStyles.headerTitle, isDark && { color: themeColors.text }]}>Minhas Aulas</Text>
+                <Text style={[desktopStyles.headerTitle, isDark && { color: themeColors.text }]}>Minhas Turmas</Text>
                 <Text style={[desktopStyles.headerSubtitle, isDark && { color: themeColors.textSecondary }]}>
                   Gerencie suas turmas e horários
                 </Text>
@@ -418,7 +418,7 @@ export default function StudentClassesScreen() {
                   </Text>
                   <Pressable 
                     style={desktopStyles.actionButton}
-                    onPress={() => Linking.openURL(whatsappLink)}
+                    onPress={() => openWhatsApp("Olá! Tenho interesse em me inscrever em novas turmas. Podem me passar as opções e horários disponíveis?")}
                   >
                     <Ionicons name="logo-whatsapp" size={18} color="#fff" />
                     <Text style={desktopStyles.actionButtonText}>Falar no WhatsApp</Text>
@@ -444,12 +444,15 @@ export default function StudentClassesScreen() {
                 </View>
 
                 {/* Dúvidas */}
-                <View style={[desktopStyles.helpCard, { backgroundColor: themeColors.bgSecondary, borderColor: themeColors.border }]}>
+                <Pressable
+                  style={[desktopStyles.helpCard, { backgroundColor: themeColors.bgSecondary, borderColor: themeColors.border }]}
+                  onPress={() => openWhatsApp("Olá! Estou com dúvidas sobre horários, faltas ou informações das minhas aulas. Podem me ajudar?")}
+                >
                   <Ionicons name="help-circle-outline" size={20} color={themeColors.textMuted} />
                   <Text style={[desktopStyles.helpText, { color: themeColors.textMuted }]}>
                     Dúvidas sobre horários ou faltas? Entre em contato com a secretaria.
                   </Text>
-                </View>
+                </Pressable>
               </View>
             </View>
           </View>
@@ -470,7 +473,7 @@ export default function StudentClassesScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.purple]} />
         }
       >
-        <SectionHeader title="Suas Aulas" />
+        <SectionHeader title="Suas Turmas" />
 
         <View style={styles.block}>
           {loading ? (
@@ -497,7 +500,10 @@ export default function StudentClassesScreen() {
 
         <View style={styles.centerBlock}>
           <Text style={styles.centerText}>Entre em contato para novas inscrições:</Text>
-          <Pressable onPress={() => Linking.openURL(whatsappLink)} style={styles.socialBtn}>
+          <Pressable
+            onPress={() => openWhatsApp("Olá! Tenho interesse em fazer uma nova inscrição em turma. Podem me ajudar com as opções disponíveis?")}
+            style={styles.socialBtn}
+          >
             <Ionicons name="logo-whatsapp" size={46} color="#1FAF38" />
           </Pressable>
         </View>

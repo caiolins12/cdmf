@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useCallback, useMemo, useState, useEffect } from "react";
-import { doc, setDoc, collection, query, where, getDocs, updateDoc, deleteDoc, orderBy, Timestamp, onSnapshot, getDoc, arrayUnion } from "firebase/firestore";
+import { doc, setDoc, collection, query, where, getDocs, updateDoc, deleteDoc, orderBy, Timestamp, onSnapshot, getDoc, arrayUnion } from "../services/postgresFirestoreCompat";
 import { db } from "../services/firebase";
 import { useAuth, Profile, Class, PaymentNotification } from "./AuthContext";
 
@@ -1525,14 +1525,7 @@ export function PaymentProvider({ children }: { children: React.ReactNode }) {
     const discountValue = isEarlyPayment ? prices.discount : 0;
     
     // Monta descrição detalhada
-    let description = `Mensalidade ${getMonthName(monthNum)}/${year} - ${classCount} turma${classCount > 1 ? "s" : ""}`;
-    
-    if (isEarlyPayment && discountValue > 0) {
-      const discountPercent = Math.round((discountValue / prices.regularPrice) * 100);
-      description += ` | 💰 Desconto de ${formatCurrency(discountValue)} (${discountPercent}%) aplicado - Pagamento até ${formatDateSafe(dueDate)}`;
-    } else {
-      description += ` | ⏰ Valor padrão - Prazo de desconto encerrado`;
-    }
+    const description = `Mensalidade ${getMonthName(monthNum)}/${year} - ${classCount} turma${classCount > 1 ? "s" : ""}`;
     
     const id = generateId("INV");
     const invoice: Invoice = {

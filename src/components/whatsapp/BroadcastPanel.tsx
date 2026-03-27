@@ -251,7 +251,8 @@ export default function BroadcastPanel({ visible, onClose }: BroadcastPanelProps
                 selectedTemplate.id,
                 audience,
                 undefined,
-                imageUrl || undefined
+                imageUrl || undefined,
+                messageText.trim() || undefined
             );
             setResult({ success: true, count: res.count, failed: res.failed, errors: res.errors });
             setStep("compose");

@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, TextInput, Text, RefreshControl, Pressabl
 import { Ionicons, FontAwesome5 } from "@/shims/icons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { showAlert, showConfirm } from "../../utils/alert";
-import { collection, onSnapshot, query as firestoreQuery, where } from "firebase/firestore";
+import { collection, onSnapshot, query as firestoreQuery, where } from "../../services/postgresFirestoreCompat";
 import { db } from "../../services/firebase";
 
 import CdmfHeader from "../../components/CdmfHeader";
@@ -337,7 +337,7 @@ export default function MasterStudentsScreen() {
           updateData.deactivatedAt = Date.now();
           updateData.deactivationNotificationSeen = false;
           if (!student.isOffline) {
-            const { arrayUnion, doc, updateDoc } = await import("firebase/firestore");
+            const { arrayUnion, doc, updateDoc } = await import("../../services/postgresFirestoreCompat");
             const { db } = await import("../../services/firebase");
             const notificationId = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             const notification: PaymentNotification = {
